@@ -529,3 +529,23 @@ Stage Summary:
 - Ce que l'utilisateur doit faire (seul, ~30-45 min) : créer le projet Supabase, pousser sur GitHub, importer sur Vercel avec les 5 variables, (option) domaine.
 - Migration des données réelles documentée : db:backup → .env→Supabase → db:push → db-restore --from=backup-20261024-122436 → set-owner-credentials → restaurer .env.
 - Notes : credentials .env committés dans l'ANCIEN historique étaient déjà invalidés (rotation faite en Task 27) ; rate-limit login par instance sur serverless (documenté honnêtement).
+
+---
+Task ID: 29
+Agent: Z.ai Code (orchestrator)
+Task: "fait le depot du projet sur github" — pousser vers https://github.com/Yac1990/VELMORA-LABS.git
+
+Work Log:
+- Remote origin configuré (HTTPS). Aucune authentification dans l'environnement → 4 tentatives avec jetons fournis par l'utilisateur :
+  1. github_pat_ (fine-grained) : identité OK mais 403 — Contents: Read and write absent.
+  2. jeton régénéré après édition : 401 — GitHub invalide l'ancienne valeur à l'édition d'un fine-grained (comportement documenté).
+  3. nouveau fine-grained : 403 confirmé via sonde API PUT /contents → "Resource not accessible by personal access token" (reste en lecture seule).
+  4. jeton CLASSIQUE ghp_ sans scopes (x-oauth-scopes vide) → 403 ; puis jeton classique avec scope `repo` → PUSH RÉUSSI.
+- Vérifications post-push : branche main distante = sha ba4a82d identique au local ; 3 commits ; 244 fichiers ; 0 secret (audit git log --all --name-only avant push).
+- Le jeton n'a JAMAIS été persisté (ni .git/config, ni fichiers) — utilisé en ligne de commande transitoire uniquement ; utilisateur invité à le révoquer.
+- worklog poussé sur le remote pour synchronisation complète.
+
+Stage Summary:
+- Dépôt GitHub Yac1990/VELMORA-LABS en ligne : main @ ba4a82d, historique propre sans secrets (prérequis Vercel atteint).
+- Leçons : fine-grained exige Contents RW + sélection de dépôt ; l'édition d'un fine-grained régénère la valeur ; classique exige le scope repo.
+- Prochaine étape utilisateur : import Vercel (variables d'env cf. DEPLOIEMENT.md §5) + révoquer le jeton GitHub.
