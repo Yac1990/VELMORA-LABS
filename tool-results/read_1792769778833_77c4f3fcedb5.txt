@@ -1,0 +1,217 @@
+     1→# Worklog — Plateforme e-commerce d'affiliation VELMORA LABS
+     2→
+     3→Projet : boutique d'affiliation internationale multi-plateformes (cahier des charges fourni).
+     4→Stack effective : Next.js 16 App Router + TypeScript + Tailwind 4 + shadcn/ui + Prisma/SQLite + z-ai-web-dev-sdk (IA réelle).
+     5→Adaptations assumées et documentées : Supabase → Prisma/SQLite (environnementsandbox) ; RBAC vérifié côté serveur sur chaque API ; route unique `/` avec SPA à vues ; redirection suivie via API `/api/go/[offerId]`.
+     6→
+     7→---
+     8→Task ID: 1
+     9→Agent: orchestrator (Z.ai Code)
+    10→Task: Inspection du projet et cadrage
+    11→
+    12→Work Log:
+    13→- Inspecté package.json : Next 16, React 19, Prisma 6, shadcn/ui complet, recharts, zod, sonner, z-ai-web-dev-sdk disponibles.
+    14→- Vérifié structure src/app, src/components/ui (librairie shadcn complète), prisma/schema.prisma (scaffold à remplacer).
+    15→- Logo VELMORA copié vers public/velmora-logo.png. Dossier public/demo/ créé pour les visuels produits générés par IA.
+    16→- Serveur dev actif sur port 3000 (dev.log OK).
+    17→
+    18→Stage Summary:
+    19→- Modèle de données complet à créer dans prisma/schema.prisma (20+ tables du cahier des charges, SQLite: pas d'enum/listes natives → String contrôlés + JSON strings).
+    20→- Données de démo systématiquement flaggées isDemo=true, jamais mélangées aux données réelles.
+    21→- Auth maison (scrypt + cookie HMAC httpOnly), RBAC 5 rôles vérifié côté serveur.
+    22→---
+    23→Task ID: 9-c
+    24→Agent: frontend (admin-ops)
+    25→Task: Vues admin partie 2 — CRM, Studio IA, Réseaux sociaux, Paramètres, Utilisateurs, Journal d'audit
+    26→
+    27→Work Log:
+    28→- Créé 6 vues dans src/components/admin/views/ (aucun autre fichier touché, aucune donnée inventée, champs null → « — ») :
+    29→  * crm.tsx — recherche (debounce 350 ms) + filtre statut (7 statuts) + « Nouveau contact » (si crm.write) ; table scrollable max-h-96 thin-scrollbar avec Badge statut colorés, Badge consentement (granted→vert « Accordé », none→gris, withdrawn→rouge « Retiré »), Badge Démo ambre ; dialog création (nom, e-mail, téléphone, pays, statut, source manual/contact_form/inquiry/import, consentement + finalité requise si « Accordé », tags virgules, notes) ; dialog détail (fiche complète, historique activités, journal des consentements purpose/statut/source/dates, ajout d'activité note/task/call/email + échéance optionnelle, changement de statut, « Retirer le consentement » PUT withdrawConsent:true avec AlertDialog, « Anonymiser » POST anonymize avec AlertDialog irréversible) ; export CSV window.open('/api/admin/export/contacts') ; note d'éthique « Les clics anonymes ne sont jamais transformés en profils identifiés. »
+    30→  * ai-studio.tsx — 4 onglets. Texte : select produit (/api/admin/products?perPage=100, fallback silencieux si rôle sans catalog.read → contexte libre), tâche (hooks/description/social_caption/script_video/email_subjects/cta avec libellés FR), audience+ton optionnels, loading 10-30 s, résultat Card + copie clipboard + « Soumettre à vérification » (PUT action:submit). Image : prompt, formats 1024x1024/768x1344/1344x768/720x1440, prévisualisation <img>, ouverture média, soumission. Storyboard : produit ou contexte, JSON parsé en scènes (numéro, durée, visuel, texte à l'écran, voix off) + CTA + musique + disclaimer, ALERT ambre renderingNote (pas de MP4, storyboard exportable), téléchargement JSON via Blob. Bibliothèque : filtres type/statut, contenu texte préformaté ou image, badges statut (draft gris, pending_review ambre « À vérifier », approved vert, rejected rouge, archived), soumettre/archiver (content.write), approuver/rejeter (ai.approve), quota affiché si renvoyé (usage.monthlyUsed/monthlyQuota) ; avertissement permanent anti-invention en bas.
+    31→  * social.tsx — 4 cartes intégrations (TikTok/Instagram/Facebook/YouTube Shorts) avec Badge « Non configuré » + notes EXACTES de l'API (integrationStatus) + Alert policy (texte exact de l'API) ; formulaire création (plateforme, légende, hashtags, lien de campagne, asset IA texte lié optionnel depuis /api/admin/ai/assets?assetType=text, scheduledAt datetime-local) ; table posts (Badge plateforme, légende tronquée, statuts draft gris/approved vert/scheduled bleu/published_manual violet/failed rouge/archivé, approuvé par, date programmée sinon création) ; actions Approuver (ai.approve, draft), Marquer publié manuellement (Dialog avec externalPostId preuve optionnelle, approuvé/programmé), Marquer échec (Dialog raison optionnelle), Archiver ; « Exporter pour publication manuelle » sur post approuvé : Dialog légende + hashtags + lien + Copier tout + lien média téléchargeable si l'asset est une image (export de secours).
+    32→  * settings.tsx — onglets Marque & international (12 clés EDITABLE_KEYS exactes, édition si settings.write sinon vue lecture seule, PUT + toast « X clés mises à jour »), Intégations (6 cartes depuis integrationsStatus : IA texte ✅, IA images ✅, rendu vidéo ❌, réseaux sociaux ❌, API partenaires ❌, taux de change ❌ — Badge configurée/non configurée + note exacte de l'API, jamais interprétée), Environnement (envDocumentation requises/optionnelles, secrets jamais côté navigateur, rappel RBAC serveur actif).
+    33→  * users.tsx — table (nom + Badge « Vous », e-mail, rôle Badge coloré, Switch actif inline désactivé sur son propre compte — le serveur refuse aussi, date création) ; dialog création (e-mail, nom d'affichage, rôle depuis l'API, mot de passe 10+ avec note « hashé scrypt côté serveur ») ; dialog édition (rôle, réinitialisation mot de passe optionnelle, activer/désactiver) ; Alert ambre « MFA non configuré dans cette version — à activer avant production ».
+    34→  * audit.tsx — table (date, acteur e-mail ou « système », action Badge font-mono, entité type · id tronqué, chevron dépliant pour métadonnées JSON dans <pre>) ; pagination simple Précédent/Suivant (perPage 50, total/page renvoyés par l'API) ; note « Journal append-only, lecture seule ».
+    35→- Respect du contrat API lu dans les routes : tags du contact = string JSON côté détail (parsé côté vue) mais array côté liste ; PUT contacts utilise activityNotes/activityDueAt (pas activityNotes→notes) ; ai assets PUT {id, action} ; social PUT actions approve/schedule/mark_published_manual/fail/archive ; settings PUT {key: value}.
+    36→- Qualité : skeletons loading, états vides explicites, erreurs serveur en toast sonner, dialogs max-h-[85vh] overflow-y-auto thin-scrollbar, tables overflow-x-auto, permissions affichage via hasPermission (le RBAC reste vérifié serveur).
+    37→- ESLint : `bunx eslint src/components/admin/views --no-warn-ignored` → 0 erreur, 0 warning sur MES 6 fichiers (les warnings directives inutiles supprimés ; l'erreur signalée dans imports.tsx appartient à l'agent 9-b). `bunx tsc --noEmit` → 0 erreur dans MES 6 fichiers.
+    38→
+    39→⚠️ Risque d'intégration détecté (à traiter par l'orchestrateur / agent API — HORS de mon périmètre) :
+    40→- prisma/schema.prisma ne définit PAS la relation CrmContact.sourceProduct (utilisé en include par GET /api/admin/crm/contacts/[id]) ni SocialPost.asset (utilisé par GET /api/admin/social/posts) → ces deux endpoints échoueront (500) tant que le schéma n'est pas complété (relations + sourceProductId → Product, aiAssetId → AiAsset) ou que les includes ne sont pas retirés. Mes vues affichent alors l'état d'erreur toast + vide, sans crash.
+    41→
+    42→Stage Summary:
+    43→- 6 vues admin opérationnelles et conformes au contrat API, prêtes à être rendues par la coque admin-app.tsx existante (interfaces CrmView/AiStudioView/SocialView/SettingsView/UsersView/AuditView({user}) respectées).
+    44→- Éthique intégrée dans l'UI : consentements tracés + droit à l'effacement (retrait/anonymisation avec confirmations), storyboard sans fausse vidéo (alerte amber + download JSON), aucune publication sociale directe (export manuel + preuve externalPostId), avertissement anti-invention IA permanent, quota IA affiché, MFA signalé non configuré.
+    45→- Suivant : corriger les 2 relations Prisma manquantes côté API/schéma pour activer détail CRM et liste sociale ; vérifier la route /api/auth/logout (TS2459 sessionFromRequest non exporté signalé par tsc, hors périmètre).
+    46→---
+    47→Task ID: 9-b
+    48→Agent: frontend (admin-catalog)
+    49→Task: Vues admin partie 1 — Tableau de bord, Produits, Catégories, Partenaires, Imports CSV, Conversions, Campagnes
+    50→
+    51→Work Log:
+    52→- docs/API-CONTRACT.md absent du repo : contrat dérivé directement des routes src/app/api/admin/** (formes exactes respectées : dashboard meta/clicks/conversions/commissions/series/topOffers/topCategories/topPartners/health ; products items avec category/media[0]/offers ; partners avec integrations+commissionRule+_count ; imports {csv, mapping, dryRun} → {jobId, counts, errors, duplicates} ; conversions liste paginée ; campaigns items).
+    53→- Créé 7 fichiers dans src/components/admin/views/ (aucun autre fichier touché, aucune donnée inventée — null → « — » ou « inconnu ») :
+    54→  * dashboard.tsx — Alert info meta.dataSource + Switch « Inclure les données de démonstration » (refetch) ; Select période (today/7d/month/quarter/year/30d/custom) + 2 Inputs date si custom ; 4 cartes KPI : clics (total + uniques + évolution % deltaPct null→« — » + note « Un clic ≠ une vente »), conversions rapportées (total + répartition par statut en Badges), commissions (formatCents + note « Commissions du site ≠ CA marchand »), liens cassés (health.brokenLinks + Alert ambre si >0) ; AreaChart recharts ResponsiveContainer (clics var(--chart-1), conversions var(--chart-2), union des jours triée) ; top produits/catégories/partenaires (Badge Démo ambre) ; exports CSV window.open('/api/admin/export/{dashboard|clicks|conversions}?days=90&includeDemo=') ; footer période + fuseau UTC + date de génération.
+    55→  * products.tsx — barre recherche (Entrée/bouton) + filtres statut & catégorie + « Nouveau produit » (catalog.write seulement) ; table max-h-96 overflow thin-scrollbar (miniature, titre+slug, Badge statut 5 états, catégorie, formatPriceRange, nb offres, partenaires, Démo, maj) + pagination ; Dialog création/édition complet : titre, slug auto (slugify client), description ≥20, résumé, statut, type (8 valeurs), langue, pays (texte libre virgules → codes 2 lettres), catégorie, prix min/max en € convertis ×100 en cents, devise EUR/USD/MAD/CHF/CAD, note de prix, Switch allowInquiry, éditeur fonctionnalités (lignes label+valeur ajoutables), médias URL+alt ajout/retrait avec suggestion /demo/velmora-<slug>.jpg ; section offres : liste éditable (URL, prix, disponibilité, enregistrement PUT → statut remis « non vérifié »), bouton Tester → toast honnête « non vérifié » (pas de vérificateur d'URL), suppression avec AlertDialog (gère réponse deactivated), ajout POST (partenaire select — liste partners.read récupérée en fallback silencieux pour l'analyste), offre initiale optionnelle à la création (body.offer) ; actions ligne : éditer, publier/suspendre/archive (PUT status), supprimer DELETE avec AlertDialog (gère réponse archived avec message serveur) ; boutons d'écriture masqués sans catalog.write.
+    56→  * categories.tsx — table (slug, nom, icône, ordre, active via Switch inline ou Badge si lecture seule, nb produits, maj) ; dialog création/édition (name, slug, description, icon lucide, sortOrder) ; toggle actif PUT ; suppression DELETE gérant {deactivated, message} → toast.info.
+    57→  * partners.tsx — cartes : nom + Démo + Badge statut (actif/en attente/inactif) + type programme, lien site, « Commission : … » (percentage % / fixed formatCents / « Commission : inconnue » si ruleType unknown ou absente), compteurs offres/clics/conversions, pays supportés Badges, domaines autorisés Badges mono + note anti open-redirect, intégrations (Badge not_configured→« Non configuré » gris / configured→vert / error→rouge + statusDetail + lastSyncAt + secretRefName « réf. serveur »), doc externe, note ; dialog création/édition (name, website, programType, status, allowedDomains Textarea 1/ligne normalisés (lowercase, sans www.), supportedCountries, documentationUrl, note, integrationType à la création) ; DELETE avec confirmation gérant deactivated.
+    58→  * imports.tsx — Tabs Produits/Conversions ; zone collage Textarea + input file (lecture file.text()) ; mini-parseur CSV réimplémenté côté client (détection séparateur , ou ; par comptage 1re ligne, guillemets et "" échappés, sans dépendance) ; mapping Selects par champ peuplés des en-têtes détectés + auto-guess par regex (title/description/price/currency/category/partner/url ; partner/externalId/date/status/orderValue/orderCurrency/commission/commissionCurrency/offerExternalId) ; Switch « Simuler (dry-run) » cochée par défaut ; rapport : compteurs serveur en Badges (libellés FR), table erreurs (row/field/message, 50 max) + liste doublons, Alert émeraude si simulation sans erreur → bouton « Lancer l'import réel » (re-POST dryRun:false) ; permissions imports.run / conversions.write (Alert si absente, serveur refuse) ; historique 50 jobs (type, statut Badge terminé/partiel/échec, dates, compteurs, erreurs tronquées).
+    59→  * conversions.tsx — filtre statut (6 états) + Switch includeDemo (refetch) ; Alert « Conversions rapportées ≠ ventes certaines » (cycle estimée→payée expliqué) ; table paginée (date UTC, partenaire + Démo, produit, ID externe mono, Badge statut estimated→sky/pending→ambre/confirmed→émeraude/cancelled→rouge/paid→violet/unknown→gris, valeur commande, commission formatCents, source) ; changement de statut Select + AlertDialog (trace la transaction de commission créée par le PUT) si conversions.write ; pagination Précédent/Suivant.
+    60→  * campaigns.tsx — table (nom + Démo, Badge canal social/email/content/paid/other, objectif, pays cible, Badge statut, clics attribués, période) ; Select statut inline (draft/active/paused/ended → PUT [id]) si content.write ; dialog création (name, channel, objective, targetCountry 2 lettres validées) ; note lecture seule si pas content.write.
+    61→- Qualité transverse : skeletons de chargement, états vides explicites (« Aucun produit — créez-en un »…), erreurs serveur → toast sonner, cartes blanches p-4/p-6 gap-4/6 sur fond zinc-100, tables overflow-x-auto mobile, dialogs max-h overflow-y-auto thin-scrollbar, Badge Démo uniformisée (border-amber-300 bg-amber-50 text-amber-700), icônes lucide-react uniquement, tous les appels via @/lib/client (apiGet/Post/Put/Delete, formatCents, formatPriceRange, formatDate).
+    62→- Corrections après revue : État lucide TriangleAlert + AlertTriangle selon fichiers (les deux exportés), suppression directives eslint-disable inutiles, double-fetch éliminé dans products (effet unique [load, page] + applyFilters), setState synchrone dans effet différé en microtask (imports), détail produit chargé avec état detailLoading dédié (skeleton dans le Dialog).
+    63→- Validation : `bunx eslint` sur mes 7 fichiers → 0 erreur 0 warning ; `bunx tsc --noEmit` → 0 erreur dans mes 7 fichiers (les erreurs restantes du repo sont dans d'autres périmètres : api routes TS, store, seed, examples).
+    64→- 500 constaté sur GET / pendant la session : modules manquants dans src/components/store/ (./legal puis ./contact-view) — travail en cours de l'agent boutique, HORS périmètre 9-b ; mes vues sont importées par admin-app.tsx et compilent (aucun TS2307 côté vues).
+    65→
+    66→Stage Summary:
+    67→- 7 vues admin du catalogue & du pilotage livrées et conformes aux formes d'API réelles, prêtes pour la coque admin-app.tsx (signature ({ user: AdminUser }) respectée).
+    68→- Éthique/transparent en UI : source de données explicitée (démo inclus ou non) partout où c'est pertinent, clics jamais présentés comme ventes, commissions séparées du CA marchand, conversions rapportées ≠ ventes certaines, bouton « Tester » honnête (statut « non vérifié »), liste blanche de domaines mise en avant contre l'open-redirect.
+    69→- RBAC : boutons d'écriture conditionnés par hasPermission côté affichage ; le serveur reste le garde-fou (messages d'erreur remontés en toast).
+    70→- Suivant (orchestrateur) : intégration finale quand la boutique (store) sera complète ; imports réels à tester avec CSV de démo ; possible amélioration : vérification d'URL serveur pour remplacer le bouton Tester informatif.
+    71→
+    72→---
+    73→Task ID: 9-a
+    74→Agent: frontend (store)
+    75→Task: Boutique publique
+    76→
+    77→Work Log:
+    78→- Lu worklog, API publiques réelles (settings/catalog/categories/products/inquiry/contact/go) comme source de vérité des formes de données (docs/API-CONTRACT.md absent des fichiers — formes déduites des routes + prisma/schema.prisma + seed).
+    79→- Créé src/components/store/store-app.tsx : racine StoreApp({ onOpenAdmin }), types partagés exportés (StoreView, StoreSettings, CategoryInfo, CatalogProduct, CatalogResponse, ProductDetailData, ProductOfferData, CatalogSeed, NavigateFn), navigation interne par état, bandeau fin demoNotice (non masquable), boot skeleton/erreur + Réessayer, layout min-h-screen flex flex-col + footer mt-auto, hash optionnel #/store?cat=&q=&p= lu au montage (setTimeout post-hydratation, zéro setState synchrone dans les effets) et écrit par history.replaceState.
+    80→- Créé header.tsx : logo + marque (API settings, fallback "VELMORA LABS"), recherche desktop+mobile (ouvre catalogue avec q), DropdownMenu catégories (desktop) / Sheet mobile, liens FAQ/Contact/À propos, bouton discret « Espace administrateur » ; lien Catalogue réinitialise les filtres (catalogCat:"").
+    81→- Créé footer.tsx : 4 liens légaux + liens boutique, mention de transparence (settings.affiliateDisclosure ou défaut), © année dynamique, pb-[calc(0.75rem+env(safe-area-inset-bottom))].
+    82→- Créé landing.tsx : hero centré type ChronoTask (titre brandTagline, recherche, /demo/hero-velmora.png avec repli dégradé de marque onError), grille 7 catégories (icônes lucide mappées depuis `icon` : FileText, GraduationCap, RefreshCw, Lamp, Cpu, Building2, Car — fallback Package), sections Nouveautés / Les plus consultés (1 fetch catalog sort=recent perPage=8, split 4+4 ; 2e rangée masquée si vide), bandeau transparence affiliée ; fade-up framer-motion léger (whileInView once).
+    83→- Créé catalog.tsx : ProductCard/ProductImage/availabilityLabel/categoryIcon partagés (exportés pour landing et product-detail), filtres recherche/catégorie/type/tri, pagination Précédent/Suivant + pages (≤9) + « Page X sur Y », état vide + Réinitialiser, skeletons, garde anti-race (requestRef), images lazy + repli dégradé+Package onError, badge Démo ambre.
+    84→- Créé product-detail.tsx : galerie (vignettes + repli), badges Démo + disponibilité (in_stock→"En stock (selon partenaire)", out_of_stock→"Rupture signalée", unknown→"Disponibilité à vérifier chez le partenaire"), prix formatPriceRange (fourchette si min≠max + note), description, features, date MAJ formatDate, pays, bloc offres (partenaire + commission : percentage→"X %", fixed→montant, sinon "Commission : inconnue" ; prix et dernière sync par offre), bouton « Voir sur {partnerName} » → window.location.href='/api/go/'+offerId, mention « Lien affilié — nous pouvons percevoir une commission. L'achat s'effectue chez le partenaire. », InquiryForm si allowInquiry.
+    85→- Créé inquiry-form.tsx : nom/e-mail/tél (optionnel)/message + case de consentement OBLIGATOIRE (transmission au partenaire explicitement libellée, retrait possible) → POST /api/public/inquiry, toasts sonner succès/erreur, panneau de succès inline.
+    86→- Créé legal.tsx : LegalPage({kind}) avec 5 vues rédigées (privacy : données collectées, clics anonymisés hachés, durées, base légale, destinataires, droits RGPD/CNIL, sécurité ; terms : nature comparateur, achat chez partenaire, prix indicatifs ; disclosure : commissions, aucun surcoût, indépendance, marquage ; cookies : pas de traceurs tiers, mesure interne sans cookie ; about : mission, 3 étapes, engagements).
+    87→- Créé contact-view.tsx : FaqView (accordéon shadcn, 8 questions réelles : fonctionnement, achat chez partenaire, rémunération/commissions, fiabilité des prix, badge Démo, fourchettes immo/véhicules, demande de renseignements, devises) + ContactView (nom, e-mail, pays, message, consentement obligatoire) → POST /api/public/contact, E2E vérifié.
+    88→- Corrigé react-hooks/set-state-in-effect (ESLint Next 16) : loadBase sans setState synchrone + retry en handler, adoption du hash via setTimeout post-hydratation ; cibles tactiles <44px corrigées (recherche hero, lien divulgation, bouton recherche en-tête).
+    89→- Tests navigateur (agent-browser) : landing, catégories→catalogue (#/store?cat=immobilier), recherche (#/store?q=excel), pagination (Page 1→2 sur 14 produits), état vide + reset, fiche scooter (commission inconnue, fourchette, mention affiliée), /api/go/<offerId>→302 example.com, formulaire contact soumis avec succès (panneau + toast), FAQ accordéon, pages légales, switch #/admin ↔ #/store, bandeau DÉMO, sheet mobile iPhone 14. Zéro erreur de page ; avertissement d'hydratation observé uniquement après HMR/Fast-Refresh (artefact dev), chargements complets propres.
+    90→- ESLint src/components/store : 0 erreur/warning. tsc --noEmit : 0 erreur dans src/components/store (20 erreurs préexistantes hors périmètre : admin API, seed, examples).
+    91→
+    92→Stage Summary:
+    93→- Boutique publique complète et branchée sur les API réelles : 9 fichiers dans src/components/store/, aucun autre fichier touché, aucune route/page ajoutée (SPA à vues sur `/` respectée).
+    94→- Transparence non négociable appliquée partout : bandeau demoNotice permanent, mention « Lien affilié » sur chaque bouton d'achat, commissions affichées ou « inconnue », disponibilités libellées sans inventer de stock, aucune stat publique, aucun bouton inerte.
+    95→- Forms : consentements explicites obligatoires (contact + inquiry), POST réels vérifiés E2E ; images avec repli dégradé de marque (seul /demo/ebook-productivite.png existe réellement, le reste tombe en repli proprement).
+    96→- Points d'attention pour la suite : sirènes Radix sous React 19 en dev (id radix-* après HMR) à surveiller en build prod ; section « Les plus consultés » alimentée par les plus récents (aucune API de popularité publique — noter si le client veut un endpoint dédié) ; formats/périphériques validés desktop + iPhone 14.
+    97→
+    98→---
+    99→Task ID: 10-11
+   100→Agent: orchestrator (Z.ai Code)
+   101→Task: Intégration finale, corrections E2E et vérification Agent Browser
+   102→
+   103→Work Log:
+   104→- Corrigé schéma Prisma : relations manquantes CrmContact.sourceProduct, SocialPost.asset, Campaign↔ClickEvent (db:push OK).
+   105→- Corrigé 10 erreurs TypeScript backend (audit null→undefined, import sessionFromRequest, variable row, seed priceCents optionnel, restructuration PUT social).
+   106→- Corrigé tsconfig (exclusion examples/, skills/, tests/ hors application) → tsc --noEmit : 0 erreur.
+   107→- BUG CRITIQUE corrigé : Prisma/SQLite stocke les DateTime en epoch ms INTEGER → les requêtes brutes strftime('%Y-%m-%d', col) renvoyaient null. Fix : strftime(col/1000,'unixepoch') + comparaisons en ms.
+   108→- BUG sérialisation corrigé : COUNT(*) SQLite renvoie BigInt → helper ok() avec replacer BigInt→Number.
+   109→- 15 visuels produits générés par IA (z-ai CLI, contenu 100 % autorisé) dans public/demo/.
+   110→- Header boutique : whitespace-nowrap sur le nom de marque (débordement corrigé).
+   111→- Tests E2E Agent Browser : landing, catalogue (14 produits), fiche immobilière (fourchette prix), bouton d'achat → 302 example.com/go/LA-IMMO-100, clic enregistré, formulaire demande avec consentement → CRM, login 5 rôles, dashboard (352 clics/7d, commissions 880,47 €), graphique 30 jours, produits, CRM (8 contacts dont les 2 soumissions réelles), audit (ai.generate journalisé), Studio IA : génération texte RÉELLE (quota 1/200, aucun fait inventé), partenaires (règles commission + liste blanche), paramètres complets.
+   112→- Tests API : RBAC analyste refusé (403 users.manage), import CSV dry-run (3 lignes : 1 créée, 2 erreurs rapportées), open-redirect bloqué (« Domaine evil-domain.com hors liste blanche »), déduplication conversions (contrainte DB).
+   113→- Qualité : bun run lint 0 erreur, tsc 0 erreur, dev.log sans erreur runtime, hydratation propre sur chargement frais (avertissement unique = artefact HMR dev documenté).
+   114→
+   115→Stage Summary:
+   116→- Plateforme complète et vérifiée de bout en bout : boutique publique, back-office 13 vues, IA réelle (LLM + images + storyboards), affiliation suivie, imports CSV, CRM conforme, RBAC serveur.
+   117→- Données démo 100 % flaggées isDemo ; intégrations non configurées affichées honnêtement (jamais simulées).
+   118→- Livrables : README.md (adaptations + checklist §20), .env.example (sans secrets), prisma/migrations_reference.sql, docs/API-CONTRACT.md.
+   119→
+   120→---
+   121→Task ID: 12
+   122→Agent: orchestrator (Z.ai Code)
+   123→Task: Correction « Connexion réussie mais pas de tableau de bord »
+   124→
+   125→Work Log:
+   126→- Diagnostic : API auth fonctionnelle (curl : login 200 + cookie, me 200). Cause réelle = panneau de prévisualisation en iframe tierce → cookie SameSite=Lax jamais renvoyé → GET /api/auth/me répond {user:null} alors que le toast « Connexion réussie » s'affiche.
+   127→- Fix serveur : src/lib/auth.ts — sessionFromRequest lit d'abord l'en-tête X-Session-Token, puis le cookie (httpOnly reste le mécanisme principal).
+   128→- Fix API login : /api/auth/login renvoie aussi le jeton signé dans le corps JSON (repli documenté en commentaire).
+   129→- Fix client : src/lib/client.ts — jeton conservé en sessionStorage (try/catch si stockage bloqué), en-tête X-Session-Token attaché à apiGet/apiPost/apiPut/apiDelete ; stocké au login, supprimé au logout ; nouvel helper apiDownload() (fetch + blob) pour les exports.
+   130→- Fix exports : dashboard.tsx et crm.tsx remplacent window.open (impossible de porter l'en-tête) par apiDownload — exports fonctionnels même sans cookie.
+   131→- UI : note honnête sur l'écran de connexion (prévisualisation intégrée / cookies bloqués / « Open in New Tab »).
+   132→- Tests : tsc 0 erreur ; curl login→token (227 car.)→/api/auth/me SANS cookie avec X-Session-Token → utilisateur renvoyé ; export dashboard HTTP 200 sans cookie. Agent Browser E2E : login admin → dashboard complet (toast + sidebar 13 vues), reload → session persistante, cookie supprimé manuellement + reload → TOUJOURS connecté via jeton de repli (scénario iframe simulé), données dashboard réelles chargées, déconnexion → retour login + token null + cookie vide, reconnexion analyste → dashboard filtré par rôle (19 boutons vs 26). bun run lint : 0 erreur. dev.log : aucune erreur runtime.
+   133→
+   134→Stage Summary:
+   135→- Le back-office est maintenant accessible dans le panneau de prévisualisation intégré : la session fonctionne avec OU sans cookies (cookie httpOnly signé prioritaire, jeton HMAC 8 h en repli via X-Session-Token).
+   136→- Exports CSV rendus fiables en contexte iframe (apiDownload avec session).
+   137→- Aucune donnée inventée ni comportement simulé ajouté ; les 5 comptes de démo restent affichés honnêtement.
+   138→
+   139→---
+   140→Task ID: 13
+   141→Agent: orchestrator (Z.ai Code)
+   142→Task: Ajout du franc CFA (XOF/XAF) aux devises
+   143→
+   144→Work Log:
+   145→- Créé source unique de vérité src/lib/money.ts : CURRENCIES (7 codes ISO 4217 avec libellés FR : EUR, USD, MAD, CHF, CAD + NOUVEAU XOF « Franc CFA (Afrique de l'Ouest) » + NOUVEAU XAF « Franc CFA (Afrique centrale) »), CURRENCY_CODES, currencyLabel().
+   146→- products.tsx : le select Devise du formulaire produit affiche désormais les libellés complets depuis @/lib/money ; labels de prix rendus dynamiques (« Prix min (XOF) » au lieu de « Prix min (en €) » codé en dur, y compris placeholders offres « Prix (XOF) » — 3 occurrences).
+   147→- settings.tsx : la devise de référence propose les 7 devises (avant : EUR/USD uniquement) ; indice du champ mis à jour ; placeholder « EUR,USD,XOF ».
+   148→- API : aucun changement nécessaire — devise stockée en String, imports produits/conversions acceptent tout code 3 lettres (XOF passe), formatage Intl.NumberFormat natif (« 25 000 F CFA »).
+   149→- Tests E2E Agent Browser : login admin → dialog produit → 7 options de devise présentes dont XOF/XAF ; libellés dynamiques vérifiés ; création d'un produit test en XOF (25 000–30 000) → table admin « 25 000 F CFA – 30 000 F CFA », publication, fiche publique « 25 000 F CFA – 30 000 F CFA » + mention fourchette ; suppression du produit test (catalogue propre). tsc 0 erreur, lint 0 erreur, dev.log sans erreur.
+   150→
+   151→Stage Summary:
+   152→- Le franc CFA est intégré dans toute la plateforme : XOF (UEMOA) et XAF (CEMAC), codes ISO corrects, affichage natif « F CFA », liste centralisée dans src/lib/money.ts pour éviter les divergences futures.
+   153→- Correctif indirect : les labels de prix ne sont plus codés en dur en « € » — ils suivent la devise choisie.
+   154→- Le stockage reste en centimes ×100 (convention interne uniforme) ; Intl gère l'affichage zéro-décimal du CFA.
+   155→
+   156→---
+   157→Task ID: 14
+   158→Agent: orchestrator (Z.ai Code)
+   159→Task: Vues « produits les plus achetés » + étoiles de popularité par clics
+   160→
+   161→Work Log:
+   162→- API publique GET /api/public/popularity : agrégation RÉELLE des clics sortants (ClickEvent → offre → produit publié, 30 j), échelle relative serveur (le plus cliqué = 5 ★, min 1 ★ dès 1 clic, 0 clic = absent), note explicite « ni des notes d'acheteurs ni des ventes », cache mémoire 60 s.
+   163→- API admin dashboard étendue : topConversions (produits par conversions rapportées, GROUP BY SQL avec détail par statut estimated/pending/confirmed/cancelled/paid/unknown, commissions par devise d'origine — jamais sommées inter-devises) + bestSeller (priorité confirmées+payées, sinon plus rapporté non annulé, avec champ basis expliquant la règle) + topConversionsNote.
+   164→- Vue admin dashboard.tsx : carte « Produits les plus achetés » — encadré trophée « Le mieux acheté : … » avec base du calcul, table classée (rang, produit + badge Démo, total rapportées, badges statuts colorés, commissions par devise), note de prudence conversions rapportées ≠ ventes certaines, état vide explicite. Respecte les filtres période + includeDemo existants.
+   165→- Boutique : src/components/store/popularity.ts (hook usePopularity avec cache module 60 s + popularityFor), composant PopularityStars (5 étoiles lucide ambre/gris + compte « N clics · 30 j », role=img avec libellé accessible complet, ne rend RIEN sans clic) ; étoiles dans ProductCard (catalogue + accueil), fiche produit (taille md + mention « pas une note d'acheteurs »), légende sous le compteur du catalogue.
+   166→- Accueil « Les plus consultés » : désormais classé par clics réels (pool 24 récents triés par popularité, top 4), sous-titre honnête quand mesuré, section masquée si aucune mesure, repli récents en cas d'erreur API.
+   167→- BUG CRITIQUE latent découvert et corrigé : le CSS servi était un cache .next du scaffold d'origine (thème shadcn neutre --primary #171717, classes .brand-gradient/.admin-sidebar-dark/.thin-scrollbar absentes → icônes de catégories invisibles, blanc sur blanc). Fix : purge rm -rf .next + redémarrage dev → dégradé VELMORA et icônes restaurés (vérifié par style calculé + captures).
+   168→- Tests E2E Agent Browser : accueil « Les plus consultés » classé réellement (Appartement T3 37 clics → 5 ★, Pack Notion 33 → 4 ★, Excel 32 → 4 ★, Clavier 28 → 4 ★) avec sous-titre transparent ; catalogue : 8 cartes avec étoiles + légende ; fiche scooter : 4 ★ ambre + « 28 clics · 30 j » + mention anti-avis ; admin : trophée « Le mieux acheté : Écouteurs sans fil Pro (2 conversions confirmées/payées — non démo) » + table 8 produits avec badges statuts et commissions devise d'origine ; mobile iPhone 14 OK ; 0 erreur console. lint 0 erreur, tsc 0 erreur, APIs sanity OK après purge.
+   169→
+   170→Stage Summary:
+   171→- Deux nouvelles mesures 100 % réelles : « produits les plus achetés » (conversions rapportées, détail par statut, commissions par devise) côté admin, et étoiles de popularité (clics sortants 30 j, échelle relative) côté boutique — aucune note/avis/vente inventée, libellés de transparence partout.
+   172→- Section « Les plus consultés » de l'accueil n'est plus arbitraire : elle reflète les clics réels.
+   173→- Correctif environnement majeur : purge du cache .next qui servait le CSS du scaffold initial (identité visuelle VELMORA restaurée).
+   174→
+   175→---
+   176→Task ID: 15
+   177→Agent: orchestrator (Z.ai Code)
+   178→Task: Diagnostic du log d'hydratation collé par l'utilisateur + réduction du bruit
+   179→
+   180→Work Log:
+   181→- Analysé /home/z/my-project/upload/Pasted Content_1792703704245.txt : diff d'hydratation React dont TOUS les attributs divergents sont externes (bis_size, bis_status, bis_frame_id, bis_body_id, bis_depth, bis_chainid, __processed_<uuid>__ — mesures de bounding-box x/y/w/h/abs_x/abs_y) injectés dans le DOM par l'environnement de prévisualisation avant hydratation. Aucun attribut applicatif en cause ; React indique lui-même « This won't be patched up » (inoffensif).
+   182→- Confirmé par test : navigateur propre (agent-browser) sur chargement frais → 0 erreur, 0 avertissement d'hydratation en console (seuls [HMR] connected + suggestion React DevTools).
+   183→- Atténuation : src/app/layout.tsx — suppressHydrationWarning sur <body> (déjà présent sur <html>) + commentaire expliquant la cause externe. Pas de script de suppression des attributs : risqué pour l'outil d'instrumentation du panneau de prévisualisation qui pourrait en dépendre.
+   184→- Vérifié que la demande 5 (Task 14) est bien complète en production : étoiles de popularité réelles sur cartes accueil/catalogue (« Popularité : 5 sur 5, mesurée par 37 clics sortants… » accessible), section « Les plus consultés » classée par clics réels, carte admin « Produits les plus achetés » (trophée « Le mieux acheté : Écouteurs sans fil Pro — 2 conversions confirmées/payées » + table 8 produits, badges par statut, commissions par devise d'origine, note de prudence).
+   185→- E2E : login admin → dashboard KPI réels (352 clics, 18 conversions rapportées, 795,78 € commissions, 0 lien cassé) ; reload propre ; retour boutique #/store étoiles visibles ; iPhone-desktop non retesté (aucun changement de layout). bunx tsc --noEmit : 0 erreur ; bun run lint : 0 erreur ; dev.log : uniquement un vieil EADDRINUSE historique en tête de fichier, sinon 200 propres.
+   186→
+   187→Stage Summary:
+   188→- Le log collé = bruit d'instrumentation externe (attributs bis_*), PAS un bug de l'application ; rien n'est cassé et l'app fonctionne avec ou sans ces attributs.
+   189→- suppressHydrationWarning ajouté sur <body> pour réduire l'affichage de ces avertissements ; pas de suppression d'attributs (risque pour l'outillage de prévisualisation).
+   190→- Demande 5 confirmée livrée et fonctionnelle (étoiles de clics côté boutique + classement « mieux achetés » côté admin) — aucune régression constatée.
+   191→---
+   192→Task ID: 16
+   193→Agent: orchestrator (Z.ai Code)
+   194→Task: Demande 6/7 — supprimer toute présentation d'affiliation côté public (« je ne veux pas le mot affilé sur le site ») ; présenter Velmora comme une plateforme multi-produits, mécanique d'affiliation conservée en arrière-plan.
+   195→
+   196→Work Log:
+   197→- Audit complet : grep « affili|partenaire » sur src + prisma. 14 fichiers concernés ; tri visibilité publique vs arrière-plan.
+   198→- Boutique publique réécrite en wording « plateforme multi-produits / vendeur » :
+   199→  * landing.tsx — badge « Plateforme multi-produits », hero sans « partenaires vérifiés » ni « liens affiliés », bandeau retitré « Comment ça marche ? » avec texte neutre, sous-titres (« Les derniers ajouts au catalogue », « clics sortants vers les offres »), alt et fallback neutralisés.
+   200→  * footer.tsx — lien légal « Divulgation des liens affiliés » → « Fonctionnement de la plateforme » ; texte par défaut neutre ; ligne « Prix indicatifs fournis par les vendeurs ».
+   201→  * catalog.tsx — disponibilité « (selon le vendeur) », popularité « clics sortants vers les offres », cartes « n offres disponibles / Offre à venir », intro catalogue neutre.
+   202→  * product-detail.tsx — suppression de la fonction commissionLabel et de l'affichage « Commission : … » ; section « Offres disponibles » ; « Prix sur le site du vendeur » ; mention bouton « Vous serez redirigé vers le site du vendeur pour finaliser votre achat. » ; « Conditions de l'offre » ; goToPartner → goToOffer.
+   203→  * inquiry-form.tsx — « partenaire annonceur » → « vendeur » (intro, toast, consentement, message de succès).
+   204→  * contact-view.tsx — FAQ réécrite (8 questions, « Comment VELMORA LABS est-il rémunéré ? » remplacée par « La consultation du site est-elle payante ? »), sous-titres et intro contact neutralisés.
+   205→  * legal.tsx — confidentialité/CGU/cookies/à propos en wording vendeur ; section CGU « Liens affiliés et rémunération » → « Redirection vers le site du vendeur » (sans commission) ; page entière « Divulgation des liens affiliés » → « Fonctionnement de la plateforme » (parcours, prix, mesure anonyme, engagements — plus aucune mention de commission).
+   206→- API & types : /api/public/settings renvoie désormais outboundNotice (nouvelle clé DB outbound_notice) ; type StoreSettings.affiliateDisclosure → outboundNotice ; l'ancienne clé affiliate_disclosure n'est plus exposée par aucune API.
+   207→- Admin (arrière-plan conservé) : EDITABLE_KEYS affiliate_disclosure → outbound_notice ; vue settings.tsx relabellisée « Message « Comment ça marche » » ; terminologie d'affiliation du back-office (Partenaires, type de programme, commissions, note dashboard) conservée volontairement — c'est l'arrière-plan assumé.
+   208→- Données : scripts/update-outbound-branding.ts (partenaires démo renommés « Boutique Démo — X », réglage outbound_notice upserté, affiliate_disclosure supprimé, demo_mode_notice neutralisé) + scripts/neutralize-vendor-wording.ts (descriptions catégories/produits/notes en base : « annonce partenaire » → « annonce du vendeur », etc.) — idempotents, aucune donnée de tracking/conversion touchée (352 clics & 18 conversions préservés). seed.ts aligné pour les futurs reseeds.
+   209→- Qualité : bunx tsc --noEmit → 0 erreur ; bun run lint → 0 erreur. E2E Agent Browser : accueil, catalogue, fiche produit (écouteurs), fiche immobilière, FAQ, page « Fonctionnement de la plateforme » → 0 occurrence visible de « affilié/affiliation/partenaire/commission » ; cartes « Boutique Démo — TechStore » ; redirection /api/go toujours en 302 (tracking intact) ; erreurs console = uniquement l'hydratation externe déjà documentée (Task 15). Captures d'écran accueil + fiche validées.
+   210→
+   211→Stage Summary:
+   212→- Le site public se présente exclusivement comme une plateforme multi-produits regroupant des offres de plusieurs vendeurs ; les mots « affilié », « affiliation », « partenaire » et « commission » ont disparu de toute surface visible par les visiteurs (composants, données seed ET base existante).
+   213→- La mécanique d'affiliation reste entièrement opérationnelle en arrière-plan : /api/go (302 + clic anonyme enregistré), commissions, conversions, vue admin « Partenaires », étiquettes démo admin — rien n'a été retiré côté serveur.
+   214→- Nouvelle clé de réglage outbound_notice (message « Comment ça marche » éditable dans l'admin) ; l'ancienne clé affiliate_disclosure n'existe plus en base.
+   215→- Scripts réutilisables : scripts/update-outbound-branding.ts et scripts/neutralize-vendor-wording.ts (idempotents).
+   216→- Suivant : phases restantes du cahier des charges (rapports avancés, durcissement) selon la feuille de route.
+   217→

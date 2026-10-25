@@ -1,0 +1,398 @@
+// VELMORA LABS — Plateforme e-commerce d'affiliation internationale
+// Modèle de données issu du cahier des charges (section 13).
+// Sprint B (passage en réel) : base PostgreSQL 17 (cluster local db/pgdata, auth scram).
+// Règles : UUID/CUID, timestamps UTC (Prisma DateTime), statuts contrôlés côté application,
+// JSON sous forme de chaînes (portable), montants en centimes (Int).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // URL d'exécution (requêtes). Sur Supabase : pooler transactionnel (port 6543,
+  // paramètre pgbouncer=true) pour survivre aux fonctions serverless Vercel.
+  // En local : PostgreSQL embarqué du projet (identique à DIRECT_URL).
+  url       = env("DATABASE_URL")
+  // URL de migration (prisma db push / migrate) : connexion DIRECTE à la base,
+  // car le pooler transactionnel ne supporte pas les opérations de schéma.
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────── Utilisateurs & paramètres ───────────────────────────
+
+model Profile {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  role         String   @default("analyst") // owner | catalog_manager | marketing_editor | crm_manager | analyst
+  locale       String   @default("fr")
+  timezone     String   @default("UTC")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────── Partenaires & intégrations ───────────────────────────
+
+model Partner {
+  id                 String   @id @default(cuid())
+  name               String
+  website            String
+  programType        String   @default("affiliate") // affiliate | direct | other
+  status             String   @default("active") // active | inactive | pending
+  documentationUrl   String?
+  supportedCountries String   @default("[]") // JSON string[]
+  allowedDomains     String   @default("[]") // JSON string[] — liste blanche pour la redirection suivie (anti open-redirect)
+  isDemo             Boolean  @default(false)
+  note               String?
+  // Sprint B — tracking réel : gabarit d'URL du réseau (placeholders {affiliateId}, {merchantId},
+  // {destUrl}, {destUrlEnc}, {subId}) appliqué par /api/go/[offerId]. Null = tracking non documenté
+  // pour ce réseau → redirection directe vers la destination (jamais de gabarit inventé).
+  trackingTemplate   String?
+  trackingDocUrl     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  offers          ProductOffer[]
+  commissionRules CommissionRule[]
+  clickEvents     ClickEvent[]
+  conversions     Conversion[]
+  integrations    PartnerIntegration[]
+}
+
+// Secrets d'intégration : jamais en clair — référence serveur uniquement (variable d'environnement)
+model PartnerIntegration {
+  id                     String    @id @default(cuid())
+  partnerId              String
+  partner                Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  integrationType        String // csv | api | webhook | feed
+  encryptedSecretRef     String? // nom de variable d'environnement, jamais la valeur
+  lastSyncAt             DateTime?
+  status                 String    @default("not_configured") // not_configured | configured | error
+  statusDetail           String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+}
+
+// ─────────────────────────── Catalogue ───────────────────────────
+
+model Category {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  icon        String? // nom d'icône lucide
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+}
+
+
+model Product {
+  id               String   @id @default(cuid())
+  categoryId       String?
+  category         Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title            String
+  slug             String   @unique
+  shortDescription String?
+  description      String
+  status           String   @default("draft") // draft | pending_review | published | suspended | archived
+  productType      String   @default("digital") // digital | training | subscription | home | electronics | real_estate | vehicle | other
+  language         String   @default("fr")
+  countries        String   @default("[]") // JSON string[]
+  features         String   @default("[]") // JSON {label,value}[]
+  priceMinCents    Int?
+  priceMaxCents    Int?
+  currency         String   @default("EUR")
+  priceNote        String? // ex: "par mois", "à partir de"
+  allowInquiry     Boolean  @default(false) // immobilier / véhicules : formulaire de demande
+  isDemo           Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  media        ProductMedia[]
+  offers       ProductOffer[]
+  aiAssets     AiAsset[]
+  inquiries    CrmContact[]
+}
+
+model ProductMedia {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  sortOrder Int     @default(0)
+}
+
+model ProductOffer {
+  id             String    @id @default(cuid())
+  productId      String
+  product        Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  partnerId      String
+  partner        Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  externalId     String?
+  destinationUrl String
+  priceCents     Int?
+  currency       String    @default("EUR")
+  availability   String    @default("unknown") // in_stock | out_of_stock | unknown
+  lastSyncedAt   DateTime?
+  isActive       Boolean   @default(true)
+  urlCheckedAt   DateTime?
+  urlCheckStatus String? // ok | broken | unverified
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  clickEvents      ClickEvent[]
+  conversions      Conversion[]
+  commissionRules  CommissionRule[]
+
+  @@unique([partnerId, externalId])
+}
+
+model CommissionRule {
+  id               String       @id @default(cuid())
+  partnerId        String
+  partner          Partner      @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  offerId          String?
+  offer            ProductOffer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  ruleType         String       @default("unknown") // percentage | fixed | unknown
+  rate             Float? // % (0-100)
+  fixedAmountCents Int?
+  currency         String       @default("EUR")
+  validFrom        DateTime     @default(now())
+  validTo          DateTime?
+  termsUrl         String?
+  note             String?
+  createdAt        DateTime     @default(now())
+}
+
+// ─────────────────────────── Affiliation & attribution ───────────────────────────
+
+model Campaign {
+  id            String    @id @default(cuid())
+  name          String
+  channel       String    @default("other") // social | email | content | paid | other
+  objective     String?
+  targetCountry String?
+  status        String    @default("active") // draft | active | paused | ended
+  startAt       DateTime?
+  endAt         DateTime?
+  isDemo        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  clickEvents ClickEvent[]
+}
+
+model ClickEvent {
+  id                 String   @id @default(cuid())
+  offerId            String
+  offer              ProductOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  partnerId          String
+  partner            Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  campaignId         String?
+  campaign           Campaign? @relation(fields: [campaignId], references: [id])
+  clickedAt          DateTime @default(now())
+  anonymousSessionId String? // identifiant minimisé (hash court), aucune donnée personnelle
+  subId              String?
+  countryCoarse      String?
+  referrer           String?
+  isDemo             Boolean  @default(false)
+
+  @@index([clickedAt])
+  @@index([offerId])
+}
+
+model Conversion {
+  id                    String    @id @default(cuid())
+  partnerId             String
+  partner               Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  externalConversionId  String
+  offerId               String?
+  offer                 ProductOffer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  reportedAt            DateTime  @default(now())
+  status                String    @default("pending") // estimated | pending | confirmed | cancelled | paid | unknown
+  orderValueCents       Int?
+  orderCurrency         String?
+  commissionAmountCents Int?
+  commissionCurrency    String?
+  sourceReportId        String?
+  isDemo                Boolean   @default(false)
+  note                  String?
+  createdAt             DateTime  @default(now())
+
+  transactions CommissionTransaction[]
+
+  @@unique([partnerId, externalConversionId]) // déduplication conversions
+  @@index([reportedAt])
+}
+
+model CommissionTransaction {
+  id               String     @id @default(cuid())
+  conversionId     String
+  conversion       Conversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
+  eventType        String // estimated | pending | confirmed | cancelled | paid
+  amountCents      Int?
+  currency         String?
+  occurredAt       DateTime   @default(now())
+  externalReference String?
+  notes            String?
+}
+
+// ─────────────────────────── CRM & consentements ───────────────────────────
+
+model CrmContact {
+  id               String    @id @default(cuid())
+  name             String
+  email            String?
+  phone            String?
+  country          String?
+  language         String    @default("fr")
+  status           String    @default("new") // new | to_contact | in_discussion | qualified | converted | lost | unsubscribed
+  source           String? // inquiry | contact_form | import | manual
+  sourceProductId  String?
+  sourceCampaignId String?
+  consentStatus    String    @default("none") // granted | none | withdrawn
+  consentPurpose   String?
+  consentAt        DateTime?
+  tags             String    @default("[]")
+  notes            String?
+  isDemo           Boolean   @default(false)
+  anonymizedAt     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  activities    CrmActivity[]
+  sourceProduct Product?      @relation(fields: [sourceProductId], references: [id])
+}
+
+model CrmActivity {
+  id           String     @id @default(cuid())
+  contactId    String
+  contact      CrmContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  activityType String     @default("note") // note | task | call | email | status_change | inquiry
+  notes        String
+  dueAt        DateTime?
+  createdAt    DateTime   @default(now())
+}
+
+model ConsentRecord {
+  id          String    @id @default(cuid())
+  subjectType String    @default("crm_contact")
+  subjectId   String
+  purpose     String
+  status      String    @default("granted") // granted | withdrawn
+  source      String
+  recordedAt  DateTime  @default(now())
+  withdrawnAt DateTime?
+}
+
+// ─────────────────────────── Studio IA & réseaux sociaux ───────────────────────────
+
+model AiAsset {
+  id           String   @id @default(cuid())
+  productId    String?
+  product      Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  assetType    String   @default("text") // text | image | video_storyboard
+  provider     String // zai-llm | zai-image | manual
+  prompt       String
+  content      String // texte généré, URL d'image ou storyboard JSON/texte
+  status       String   @default("draft") // draft | pending_review | approved | rejected | archived
+  costEstimate Float?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+
+  socialPosts SocialPost[]
+}
+
+model SocialPost {
+  id            String    @id @default(cuid())
+  aiAssetId     String?
+  platform      String    @default("tiktok") // tiktok | instagram | facebook | youtube
+  caption       String
+  hashtags      String?
+  campaignLink  String?
+  scheduledAt   DateTime?
+  approvedBy    String?
+  approvedAt    DateTime?
+  publishStatus String    @default("draft") // draft | approved | scheduled | published_manual | failed | archived
+  externalPostId String?
+  errorMessage  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  asset AiAsset? @relation(fields: [aiAssetId], references: [id])
+}
+
+// ─────────────────────────── Imports, audit, divers ───────────────────────────
+
+model ImportJob {
+  id           String    @id @default(cuid())
+  importType   String // products | conversions
+  status       String    @default("completed") // completed | partial | failed
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  countsJson   String    @default("{}")
+  errorSummary String?
+  actorId      String?
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorId       String?
+  actorEmail    String?
+  action        String
+  entityType    String?
+  entityId      String?
+  metadataJson  String?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model ExchangeRate {
+  id            String   @id @default(cuid())
+  baseCurrency  String
+  quoteCurrency String
+  rate          Float
+  provider      String
+  fetchedAt     DateTime @default(now())
+
+  @@unique([baseCurrency, quoteCurrency])
+}
+
+// Sprint B — e-mails réels : journal complet des tentatives d'envoi (SMTP via nodemailer).
+// Aucune simulation : chaque entrée reflète un envoi réel (statut sent/failed + erreur SMTP
+// authentique) ou une mise en file (queued) quand SMTP n'est pas encore configuré.
+model EmailLog {
+  id               String    @id @default(cuid())
+  toEmail          String
+  subject          String
+  bodyText         String
+  bodyHtml         String?
+  purpose          String    @default("admin_test") // inquiry_notification | admin_test | crm_followup | contact_confirmation
+  status           String    @default("queued") // queued | sent | failed | suppressed
+  provider         String? // ex: smtp
+  smtpHost         String?
+  errorMessage     String?
+  attempts         Int       @default(0)
+  relatedContactId String?
+  sentAt           DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([createdAt])
+}

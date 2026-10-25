@@ -1,0 +1,62 @@
+/* ── Task 19 + Task 20 : bandes de logos défilants (styles isolés via CSS Modules) ──
+   Portée stricte : aucune classe globale, aucun effet hors du composant LogoMarquee.
+   Task 20 : le MOUVEMENT est piloté en JavaScript (requestAnimationFrame) dans le
+   composant — plus aucune animation/keyframes CSS ici, car une animation CSS est
+   désactivée par les environnements qui forcent « prefers-reduced-motion »
+   (panneau de prévisualisation), ce qui figeait les bandes. Ce fichier ne conserve
+   que la mise en page, le fondu latéral et le responsive. */
+
+/* Zone d'une bande : contenue, sans débordement, fondu doux sur les bords. */
+.band {
+  overflow: hidden;
+  width: 100%;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
+}
+
+/* Piste : deux moitiés identiques → boucle modulo moitié sans saut (moteur JS). */
+.track {
+  display: flex;
+  width: max-content;
+  align-items: center;
+  will-change: transform;
+}
+
+/* Moitié de piste : liste horizontale sans puces. */
+.half {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.5rem;
+}
+
+/* Logos : hauteur homogène, couleurs d'origine, aucun cadre. */
+.logo {
+  display: block;
+  height: 1.75rem; /* 28 px */
+  width: auto;
+  max-width: 7.5rem; /* 120 px */
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Responsive : logos réduits proportionnellement sur petit écran. */
+@media (max-width: 640px) {
+  .logo {
+    height: 1.375rem; /* 22 px */
+    max-width: 5.75rem; /* 92 px */
+  }
+  .item {
+    padding: 0 1rem;
+  }
+}

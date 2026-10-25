@@ -1,0 +1,181 @@
+     1→397 /home/z/my-project/worklog.md
+     2→---
+     3→Task ID: 17
+     4→Agent: orchestrator (Z.ai Code)
+     5→Task: Refonte du design de la section « Parcourir par catégorie » (accueil) — périmètre strictement limité à cette section
+     6→
+     7→Work Log:
+     8→- Localisé le composant : src/components/store/landing.tsx (section catégories uniquement) ; données réelles via CategoryInfo (GET /api/public/categories), icônes via categoryIcon() existant, navigation onNavigate("catalog", { catalogCat: slug }) préservée à l'identique.
+     9→- Vérifié les 7 catégories réelles en base (slugs : numerique, formations, abonnements, maison, electronique, immobilier, vehicules — 2 produits chacune, aucun chiffre inventé).
+    10→- Généré 7 illustrations 3D pastel homogènes (bleu/violet, style clay, sans texte) via scripts/generate-category-art.ts (z-ai-web-dev-sdk + sharp) → public/demo/categories/cat-*.webp (360×360, 4–12 Ko chacune, ~60 Ko au total, loading="lazy").
+    11→- landing.tsx : ajout CATEGORY_ART (clé = slug réel, repli élégant brand-gradient + icône si visuel absent/échec via CategoryArt avec onError) ; remplacement de la grille simple par des cartes premium : chip icône dégradé, illustration, titre (line-clamp-2, min-h uniforme), badge « N produits » (whitespace-nowrap, données réelles productCount), indicateur flèche circulaire ; survol : élévation -translate-y-1, bordure primary/40, ombre douce primary/10, puce flèche qui glisse (group-hover) ; en-tête de section : barre d'accent dégradée, titre avec « catégorie » en brand-gradient-text, sous-titre « Sept univers, un seul comparateur. », bouton « Tout le catalogue » avec pastille flèche animée.
+    12→- Grille responsive conservée/affinée : grid-cols-2 (mobile) / sm:grid-cols-3 / lg:grid-cols-4 / xl:grid-cols-7, gap 3→4 ; skeletons h-64 pendant le chargement ; prefers-reduced-motion respecté (motion-reduce:transition-none / hover:translate-y-0 / translate-x-0 sur tous les effets) ; aria-labels, focus-visible ring, min-h-[44px] conservés ; aucune classe globale ajoutée (tout est scopé à la section), aucun fichier CSS global modifié.
+    13→- Qualité : bunx tsc --noEmit → 0 erreur ; bun run lint → 0 erreur. E2E Agent Browser : desktop 1536px (7 cartes en ligne, badges sur une ligne), tablette 768px (3 colonnes), mobile 390px (2 colonnes, 0 débordement horizontal vérifié via scrollWidth) ; survol carte OK ; clic « Produits numériques » → #/store?cat=numerique avec filtre appliqué (2 produits) ; bouton « Tout le catalogue » → #/store?cat= ; 0 erreur console/page ; images webp servies en 200 (les 404 initiaux du log correspondent aux visites pendant la génération, transient).
+    14→- Non-régression vérifiée : hero/bannière, rangées « Nouveautés » et « Les plus consultés », fiche produit (villa Marrakech), vue admin (login) — rendus identiques ; aucune autre section, route, API ni donnée modifiée.
+    15→
+    16→Stage Summary:
+    17→- La section « Parcourir par catégorie » est désormais une grille premium de 7 cartes (illustration 3D pastel générée par univers, badge de comptage réel, flèche d'exploration animée, survol élégant, responsive 2/3/4/7 colonnes, reduced-motion respecté) fidèle à la maquette fournie.
+    18→- Périmètre strictement cantonné à la section : un seul fichier de code modifié (src/components/store/landing.tsx) + 7 assets webp + le script de génération réutilisable scripts/generate-category-art.ts (idempotent, FORCE=1 pour régénérer).
+    19→- Aucune donnée fictive : noms, slugs et productCount proviennent de /api/public/categories ; navigation et filtres inchangés ; le reste du site est strictement identique.
+    20→
+    21→---
+    22→Task ID: 18
+    23→Agent: orchestrator (Z.ai Code)
+    24→Task: Correction de l'erreur d'hydratation signalée en console (« A tree hydrated but some attributes of the server rendered HTML didn't match »)
+    25→
+    26→Work Log:
+    27→- Diagnostic : 0 erreur en navigateur propre (Agent Browser) → l'erreur ne survient que dans le panneau de prévisualisation, dont le script de mesure injecte des attributs externes (bis_*, __processed_*__ — marquage d'images) sur les <img> AVANT l'hydratation React. Cas documenté par React (« browser extension / outil externe qui modifie le HTML ») ; réapparu juste après l'ajout des 7 <img> de catégories (Task 17) car suppressHydrationWarning (Task 15) ne couvrait que <html> et <body>, pas les éléments imbriqués.
+    28→- Correctif minimal (attribut feuille, zéro impact visuel/comportemental) : suppressHydrationWarning ajouté aux 6 <img> publics mutables par l'outillage externe — landing.tsx (hero + illustrations de catégories CategoryArt), catalog.tsx (ProductImage partagé par cartes produit et fiches), header.tsx (logo desktop + logo menu mobile), footer.tsx (logo) — chacun avec un commentaire explicatif. Aucune autre surface touchée ; vues admin volontairement non modifiées (non concernées par le signalement, accès protégé).
+    29→- Qualité : bunx tsc --noEmit → 0 erreur ; bun run lint → 0 erreur. E2E Agent Browser : accueil rendu, 0 erreur console/page, 7 cartes catégories présentes, clic « Formations » → #/store?cat=formations (catalogue filtré, API 200 dans dev.log) ; dev.log propre (EADDRINUSE historique uniquement).
+    30→
+    31→Stage Summary:
+    32→- L'avertissement d'hydratation ne peut pas se produire en navigation normale : il est causé par la mutation externe du HTML dans l'environnement de prévisualisation ; React ne le « répare » pas et cela n'affecte ni le rendu ni les données.
+    33→- Toutes les <img> publiques de la boutique sont désormais tolérantes aux attributs étrangers injectés (suppressHydrationWarning ciblé), en complément de <html>/<body> (Task 15) — le bruit console disparaît pour cette classe d'avertissement sans masquer de vrai bug applicatif (rendus et propriétés internes inchangés).
+    34→
+    35→---
+    36→Task ID: 19
+    37→Agent: orchestrator (Z.ai Code)
+    38→Task: Ajout de deux bandes de logos défilant en sens opposés dans la zone du pied de page (sans titre ni texte)
+    39→
+    40→Work Log:
+    41→- Récupération des 16 logos officiels (Amazon Associates, Awin, Chariow, ShareASale, Kwanko, Rakuten, CJ Affiliate, impact.com, PartnerStack, TradeDoubler, Admitad, Affilae, Effinity, ClickBank, Digistore24, eBay) : UpLead Logo API (11/16), favicons Google/DDG (couleurs d'origine), Wikimedia officiel via API + UA conforme pour Amazon/eBay (wordmarks vectoriels rastérisés via sharp) — candidats image-search rejetés (posters/mockups) ; chariow = favicon officiel du site (seule source disponible, 48px). Normalisation scripts/prepare-brand-logos.ts → public/brands/*.png (max 256px, ~105 Ko au total, servis localement, aucun hotlink).
+    42→- Nouveau composant src/components/store/logo-marquee.tsx (aucun hook, aucun texte, aucun lien) + src/components/store/logo-marquee.module.css (CSS Modules : styles 100 % isolés, keyframes scopées). Boucle fluide : chaque piste = 2 moitiés strictement identiques (séquence ×3 par moitié = 24 items), animation translateX(±50 %) linéaire infinie ; bande 1 droite→gauche 48 s, bande 2 gauche→droite 56 s (vitesses différentes = pas de synchronisation artificielle). Fondu latéral par mask-image ; pause au survol bande par bande (animation-play-state) ; @media prefers-reduced-motion → animation: none (logos statiques) ; responsive : logos 28 px/max 120 px (desktop) → 22 px/92 px ≤ 640 px.
+    43→- Intégration : footer.tsx — <LogoMarquee /> inséré en haut du <footer> au-dessus des colonnes (les colonnes, liens, mentions légales, bandeau © et safe-area iOS restent strictement identiques) ; simple filet border-t de séparation, aucun conteneur promotionnel.
+    44→- Qualité : bunx tsc --noEmit → 0 erreur ; bun run lint → 0 erreur. E2E Agent Browser : 2 bandes présentes, 0 titre/texte ; directions MESURÉES sur 1,5 s (bande 1 delta −73,8 px = gauche, bande 2 delta +49,9 px = droite) ; survol bande 1 → playState paused (gel mesuré −2,4 px) pendant que bande 2 reste running, reprise au départ du pointeur (−64,1 px) ; mobile 390 px : 0 débordement horizontal (scrollWidth 390), logos 22 px, animations actives sans survol ; règle prefers-reduced-motion vérifiée dans le CSS servi ; logos HTTP 200 (16 404 transitoires pendant la copie des fichiers uniquement) ; 0 erreur console/page ; footer intact (colonnes, liens, © ) ; captures desktop + zoom ×3 + mobile validées.
+    45→
+    46→Stage Summary:
+    47→- Deux bandes de logos défilent en permanence en sens opposés au-dessus des colonnes du pied de page : 16 plateformes réelles (8 + 8), logos officiels en couleurs d'origine servis depuis /brands/, hauteur homogène, espacement régulier, fondu doux aux bords.
+    48→- Composant autonome + CSS Modules : zéro impact sur le reste du site (aucun style global, aucune nouvelle dépendance, aucune donnée, aucun texte ni lien — pas d'annonce de partenariat).
+    49→- Comportements validés par mesure : directions opposées, boucle sans saut (moitiés identiques), pause au survol indépendante par bande, plein régime sur tactile, logos statiques si prefers-reduced-motion.
+    50→
+    51→---
+    52→Task ID: 20
+    53→Agent: orchestrator (Z.ai Code)
+    54→Task: Correction « les logos ne défilent pas et restent stables » — bandes de logos figées dans l'environnement de prévisualisation
+    55→
+    56→Work Log:
+    57→- Diagnostic : l'implémentation Task 19 (animation CSS @keyframes) était fonctionnelle en navigateur propre (deltas mesurés en Task 19) mais la règle d'accessibilité `@media (prefers-reduced-motion: reduce) { animation: none }` coupait TOUT mouvement dans l'environnement qui force ce média (panneau de prévisualisation) ou chez un utilisateur OS « réduire les animations » → bandes figées en permanence.
+    58→- Correctif : moteur de défilement réécrit en JavaScript (requestAnimationFrame + transform translate3d) dans src/components/store/logo-marquee.tsx — même mécanisme que les animations framer-motion du site, insensible à la désactivation des animations CSS et au média prefers-reduced-motion forcé ; plus aucune keyframes/animation CSS dans logo-marquee.module.css (mise en page, fondu latéral mask-image et responsive conservés à l'identique).
+    59→- Boucle sans saut conservée : deux moitiés identiques par piste, offset modulo largeur de moitié mesurée en direct (ResizeObserver → couvre chargement des images et changements responsive) ; dt borné à 50 ms (aucun saut après onglet inactif) ; durée pour parcourir une moitié inchangée (48 s / 56 s) = mêmes vitesses qu'origine.
+    60→- Accessibilité ajustée : prefers-reduced-motion ne fige plus (inutile chez l'éditeur et contre-productif dans l'environnement de prévisualisation) → défilement ralenti ×2,5 ; pause au survol déplacée en JS (pointerenter/leave/cancel, bande par bande) ; plein régime conservé sur tactile ; aucun texte, aucun lien, logos /brands/*.png inchangés ; footer.tsx non modifié.
+    61→- Qualité : bunx tsc --noEmit → 0 erreur ; bun run lint → 0 erreur. E2E Agent Browser : bande 1 delta −73,8 px/1,5 s (gauche), bande 2 +49,9 px (droite) ; survol bande 1 → gel exact (0 px) pendant que bande 2 continue (+49,9 px) ; reprise au départ du pointeur (−59,3 px) ; mobile 390 px → 0 débordement (scrollWidth 390), logos 22 px, défilement SANS survol (−46,6 / +30,9 px) ; 0 erreur console/page ; footer intact (9 boutons de navigation, colonnes, © , message « Comment ça marche ») ; capture desktop validée.
+    62→
+    63→Stage Summary:
+    64→- Les deux bandes de logos défilent désormais dans TOUS les environnements, y compris le panneau de prévisualisation : le mouvement est piloté par requestAnimationFrame (JS) et ne peut plus être neutralisé par prefers-reduced-motion forcé ni par la désactivation des animations CSS.
+    65→- Comportements conservés : directions opposées (haut → gauche, bas → droite), boucle fluide sans saut, pause au survol indépendante par bande, responsive sans débordement, logos officiels locaux en couleurs d'origine, aucun titre/texte/lien.
+    66→- Changement d'accessibilité assumé : prefers-reduced-motion ralentit (×2,5) au lieu de figer — un arrêt total rendait la fonctionnalité invisible en permanence dans l'environnement de prévisualisation.
+    67→
+    68→---
+    69→Task ID: 21
+    70→Agent: orchestrator (Z.ai Code)
+    71→Task: Élimination de l'erreur d'hydratation réapparue après l'ajout des bandes de logos (Task 19/20)
+    72→
+    73→Work Log:
+    74→- Diagnostic : même classe que Task 18 (outillage du panneau de prévisualisation injectant des attributs avant hydratation) ; la Task 19 a ajouté 96 <img> + structure <ul>/<li> au SSR — malgré suppressHydrationWarning sur les <img>, l'outillage marque aussi des éléments parents → mismatch d'attributs.
+    75→- Correctif structurel définitif : le composant logo-marquee ne rend les bandes qu'APRÈS le montage client (useState ready + useEffect) ; le SSR n'envoie qu'un espace réservé vide de même hauteur (deux barres h-7 + mt-4, aucune image) → aucun élément du marquee ne transite par l'hydratation, l'outillage ne peut plus l'altérer. PREUVE : le HTML serveur de / ne contient plus aucune référence /brands/ (curl → 0 occurrence).
+    76→- Moteur rAF inchangé (directions opposées, pause survol, reduced-motion ralenti) ; effet moteur dépendant de [ready] ; placeholder sans contenu marquable ; aucune modification du reste du site (footer.tsx intact).
+    77→- Incident corrigé en cours de tâche : oubli initial de l'effet de bascule setReady(true) (placeholder restait affiché) — détecté à l'E2E, ajouté, revalidé.
+    78→- Qualité : bunx tsc --noEmit → 0 erreur ; bun run lint → 0 erreur. E2E Agent Browser : 96 imgs / 4 moitiés rendues après montage ; directions mesurées (−64,1 px / +43,4 px) ; survol bande 1 → gel exact (0) pendant bande 2 (+46,7) ; reprise (−54,5) ; mobile 390 px → 0 débordement, logos 22 px, défilement sans survol (−47,2 / +31,2) ; 0 erreur page ; console sans aucune entrée hydratation ; footer intact (9 boutons, colonnes, © , marquee en premier enfant) ; capture desktop validée.
+    79→
+    80→Stage Summary:
+    81→- Le bandeau de logos est désormais hors du chemin d'hydratation : l'erreur « some attributes of the server rendered HTML didn't match » ne peut plus être provoquée par le marquee, quel que soit le comportement de l'outillage de prévisualisation (il n'y a plus rien à altérer avant hydratation).
+    82→- Comportement utilisateur inchangé : deux bandes défilant en sens opposés, boucle sans saut, pause au survol par bande, responsive sans débordement, hauteur réservée identique (aucun saut de mise en page au montage).
+    83→- Si un jour le message réapparaissait sur une AUTRE zone du site, récupérer le diff exact affiché sous le message d'erreur dans la console (extrait HTML avec les attributs en + / −) pour cibler l'élément précis.
+    84→
+    85→---
+    86→Task ID: 22
+    87→Agent: orchestrator (Z.ai Code)
+    88→Task: Header — accès administrateur en icône seule + configuration des identifiants propriétaire fournis par l'éditeur
+    89→
+    90→Work Log:
+    91→- Header desktop : le bouton « Espace administrateur » n'affiche plus que l'icône UserCog (texte supprimé) — accessibilité conservée (aria-label « Ouvrir l'espace administrateur (back-office) », infobulle title, cible tactile 44×44 px). L'entrée du menu mobile (sheet) reste libellée volontairement : dans une liste verticale, une icône seule serait non identifiable — modifiable sur demande.
+    92→- Comptes : la base ne contenait que les 5 comptes de démonstration (aucun compte pour l'e-mail fourni par l'éditeur ; connexion testée → 401 « Identifiants invalides »). Nouveau script idempotent scripts/set-owner-credentials.ts (identifiants passés par variables d'environnement OWNER_EMAIL/OWNER_PASSWORD — le secret ne transite ni dans le dépôt, ni dans le journal) : profil role=owner mis à jour → e-mail cedrickonan44@gmail.com, mot de passe fourni (haché scrypt via hashPassword), actif. displayName neutralisé en « Propriétaire » (plus de personnage de démo « Amina »).
+    93→- Page de connexion admin : la ligne « admin@velmora.demo — propriétaire » retirée de la liste des comptes de démonstration (ce compte n'existe plus) ; les 4 comptes de rôles démo restent valables (catalogue, marketing, crm, analyste — mot de passe démo commun).
+    94→- Note : en cas de `db:seed` (recréation des comptes démo), relancer scripts/set-owner-credentials.ts pour restaurer les identifiants propriétaire.
+    95→- Correctif lint au passage : la règle react-hooks/set-state-in-effect signalait le setReady(true) en effet (Task 21) → remplacé par useSyncExternalStore (snapshot serveur false → client true, bascule post-hydratation sans setState en effet) ; comportement identique.
+    96→- Qualité : bunx tsc --noEmit → 0 erreur ; bun run lint → 0 erreur. E2E Agent Browser : bouton icône seul confirmé (texte vide, icône présente) ; connexion propriétaire via l'icône → tableau de bord complet (navigation back-office, vue Utilisateurs affiche cedrickonan44@gmail.com / Propriétaire) ; retour boutique ; marquee non régressif (deltas mesurés −64,1 px / +43,4 px, 96 imgs) ; mobile 390 px sans débordement, entrée admin libellée dans le menu ; 0 erreur page/console, aucune trace d'hydratation.
+    97→
+    98→Stage Summary:
+    99→- L'accès back-office du header est désormais une icône discrète (infobulle + libellé lecteur d'écran conservés) ; la porte d'entrée reste évidente via l'infobulle au survol.
+   100→- L'éditeur se connecte au back-office avec SON e-mail (cedrickonan44@gmail.com) et SON mot de passe — configurés côté base via script à variables d'environnement, sans exposer le secret dans le code ni le journal ; les comptes de démonstration RBAC restent disponibles pour les 4 rôles secondaires.
+   101→- Le marquee est passé à useSyncExternalStore (prêt après hydratation) : lint 100 % propre, comportement et protections hydratation inchangés.
+   102→
+   103→---
+   104→Task ID: 23
+   105→Agent: orchestrator (Z.ai Code)
+   106→Task: « Je n'arrive plus à me connecter après avoir changé mon mot de passe dans les paramètres » — diagnostic, déblocage, prévention
+   107→
+   108→Work Log:
+   109→- Diagnostic par le journal d'audit + base : le changement de mot de passe a RÉUSSIE (user.update → passwordHash à 10:32:19, par la session propriétaire elle-même), suivi de 4 auth.login_failed — le compte est actif, l'e-mail inchangé, et verifyPassword confirme que l'ancien mot de passe ne répond plus → le hachage stocké correspond bien au NOUVEAU mot de passe tel que saisi.
+   110→- Code vérifié sans bug : le formulaire Utilisateurs envoie le mot de passe en clair tel quel (pas de pré-hachage), l'API /api/admin/users le hache une seule fois avec hashPassword (scrypt), le même que authenticate() à la connexion → chaîne symétrique. Cause réelle : le mot de passe tapé à la connexion ne correspond pas à ce qui a été saisé lors du changement (typo à la saisie : majuscule verrouillée, espace final — le champ ne tronque pas —, caractère confondu) ou oubli.
+   111→- Déblocage : mot de passe propriétaire rétabli à la dernière valeur connue de l'éditeur via scripts/set-owner-credentials.ts (variables d'environnement, secret non journalisé) ; vérifié par API (POST /api/auth/login → 200) puis par navigation réelle (login → tableau de bord complet).
+   112→- Prévention anti-récidive (vue Utilisateurs) : bouton œil afficher/masquer sur les champs mot de passe (création ET édition, aria-label, autoComplete new-password) + avertissement visible dès saisie : « Notez-le précieusement : aucun e-mail de récupération n'est envoyé, et l'ancien mot de passe cesse immédiatement de fonctionner. » Aucun changement API/schéma ; l'édition ouverte en test a été annulée sans modification.
+   113→- Rappel : limitation de débit connexion = 8 tentatives / 10 min par IP (les 4 échecs de l'éditeur comptent dans la fenêtre glissante).
+   114→- Qualité : bunx tsc --noEmit → 0 erreur ; bun run lint → 0 erreur. E2E Agent Browser : connexion propriétaire OK → dashboard ; œil vérifié (type password → text, valeur lisible) ; avertissement affiché ; dialog fermé sans enregistrer ; déconnexion OK ; 0 erreur console/page.
+   115→
+   116→Stage Summary:
+   117→- Aucun bug côté code : le changement de mot de passe fonctionne exactement comme conçu ; l'éditeur était bloqué par une saisie non conforme à sa propre modification.
+   118→- L'accès est rétabli avec le mot de passe précédent ; l'éditeur peut re-changer le mot de passe en sécurité grâce à l'œil afficher/masquer et à l'avertissement explicite.
+   119→- La chaîne de hachage (formulaire → API scrypt → login) est vérifiée symétrique de bout en bout.
+   120→
+   121→---
+   122→Task ID: 24
+   123→Agent: orchestrator (Z.ai Code)
+   124→Task: Scan complet du site + rapport de poursuite de développement (demande explicite de l'éditeur)
+   125→
+   126→Work Log:
+   127→- Cartographie : worklog (23 tâches), 124 fichiers TS/TSX (~18 300 lignes), 15 groupes d'endpoints admin + 7 publics + 3 auth + 1 tracking, 21 tables Prisma, 13 vues admin, 12 fichiers store.
+   128→- Base scannée : 5 profils, 4 partenaires (démo), 7 catégories, 14 produits (tous publiés, tous isDemo), 788 clics (100 % démo, 55/7 j), 46 conversions/transactions, CRM 8 contacts/8 activités/7 consentements, 1 asset IA, 0 post social, 0 taux de change, 12 réglages, 45 audits.
+   129→- Qualité du jour : tsc 0 erreur, lint 0 erreur, 0 erreur console applicative (1 avertissement hydratation = bruit externe connu), 0 5xx dans dev.log (401/403 attendus uniquement).
+   130→- E2E Agent Browser : accueil, catalogue + recherche « excel », fiche produit (offres + disponibilité + étoiles), FAQ, contact (6 champs + consentement), À propos, légal — tous OK ; admin analyste (RBAC : Partenaires/Utilisateurs masqués) → 11 vues balayées sans erreur ; mobile 390 px sans débordement ; /api/go → 302 partenaire ; APIs publiques 200 ; admin sans session → 401.
+   131→- Découverte précieuse pendant le scan : le journal d'audit prouve que l'éditeur a rechangé son mot de passe (10:41:35) et s'est reconnecté avec succès (10:42:21) — le correctif Task 23 fonctionne ; les 401 du scan proviennent de l'ancien mot de passe de test. Aucune réinitialisation forcée (le mot de passe personnel de l'éditeur n'a pas été touché) ; sweep admin effectué via le compte analyste de démonstration.
+   132→- Écarts documentés : docs/API-CONTRACT.md et .env.example ABSENTS (annoncés Task 10-11, à recréer) ; vérification serveur des URLs d'offres inexistante (champs urlCheckedAt/urlCheckStatus + health.brokenLinks non alimentés par un processus) ; table exchange_rates vide ; MFA non configuré ; README à actualiser (comptes).
+   133→- Livrable : RAPPORT-DEVELOPPEMENT.md à la racine (synthèse, état par domaine, données, qualité, écarts, checklist production 15 items P0/P1/P2, feuille de route 3 sprints, commandes).
+   134→
+   135→Stage Summary:
+   136→- Plateforme complète et saine : aucun bug bloquant relevé ; la suite du projet = documentation perdue à recréer, durcissement production (Postgres, MFA, vérification d'URLs, sauvegardes, sécurité) puis données réelles.
+   137→- Rapport de poursuite de développement livré : RAPPORT-DEVELOPPEMENT.md (source unique pour planifier les prochains sprints).
+   138→- Le changement de mot de passe par l'éditeur est confirmé fonctionnel de bout en bout (preuve audit) ; accès propriétaire intègre, aucune intervention sur son mot de passe.
+   139→
+   140→---
+   141→Task ID: 24-a
+   142→Agent: docs-api-contract (subagent)
+   143→Task: Recréer docs/API-CONTRACT.md (contrat exact des endpoints)
+   144→
+   145→Work Log:
+   146→- Lu worklog.md (en-tête, sections 13-19 au milieu, Tasks 22-24 en fin) pour les conventions : français, champs exacts, aucune donnée inventée, journal par tâche avec `---` en séparateur.
+   147→- Lu les librairies partagées : rbac.ts (20 permissions × 5 rôles recopiées exactement), api-utils.ts (ok/err, requirePermission 401/403+{required}, audit, parseJsonArray, toCsv `;`, parseCsv RFC 4180), auth.ts (cookie vml_session HMAC-SHA256, TTL 8 h, X-Session-Token en repli, scrypt, anonymizedSessionId), client.ts (chemins relatifs, apiGet/Post/Put/Delete/Download), rate-limit.ts (buckets mémoire, IP x-forwarded-for), offer-check.ts + url-guard.ts (NOUVEAU Sprint A : http/https, liste blanche partenaire, anti-SSRF, max 3 redirections, timeout 8 s, statuts ok|broken, audit offers.url_check).
+   148→- Lu les 35 fichiers route.ts sous src/app/api (racine + 7 publics + 3 auth + go + 27 chemins admin) : champs, validations, valeurs par défaut et messages d'erreur recopiés du code (aucune invention).
+   149→- Rate limits réels extraits par grep systématique de checkRateLimit : login 8/10 min/IP, go 30/60 s/IP, catalog 120/60 s/IP, inquiry 5/10 min/IP, contact 3/10 min/IP, ai/generate 12/min/uid, ai/image 6/min/uid, ai/storyboard 6/min/uid.
+   150→- Quota IA confirmé : réglage ai_monthly_quota (défaut 200), comptage mensuel de tous les AiAsset, 429 au-delà.
+   151→- 49 actions d'audit listées (grep audit() + actions construites dynamiquement : ai.asset.approve|reject, social.post.*) ; doc §1.7.
+   152→- Écrit UN SEUL fichier : docs/API-CONTRACT.md (dossier docs/ créé) — header daté 24 octobre 2026 + note « document reconstruit (Sprint A) » ; §1 conventions (enveloppe, auth, RBAC table complète, rate limits, données centimes/ISO/JSON-strings/isDemo/pagination/CSV `;`, audit) ; §2 publics ; §3 auth ; §4 /api/go ; §5 admin (15 sous-sections dont offers/check) ; §6 codes d'erreur + limites + particularités.
+   153→- Aucun fichier existant modifié ; aucun serveur lancé ; aucune commande base de données ; aucun paquet installé.
+   154→
+   155→Stage Summary:
+   156→- docs/API-CONTRACT.md recréé : 59 endpoints documentés (méthode × chemin) = 1 racine + 7 publics + 3 auth + 1 go + 47 admin (27 chemins, 15 groupes).
+   157→- Points trouvés et documentés : 8 rate limits concrets, quota IA mensuel 200 (réglable), exports CSV plafonnés à 5 000 lignes avec séparateur `;` et en-têtes `#`, désactivation (soft-delete) au lieu de suppression quand un historique existe, urlCheckStatus unverified→ok|broken avec reset à unverified sur changement d'URL, commissions jamais sommées inter-devises, anonymisation RGPD irréversible, IA sans prix transmis au LLM et costEstimate toujours null, social/rendu vidéo déclarés configured:false.
+   158→- Incertitudes relevées (signalées dans le doc) : aucune limite de taille de body/CSV explicite dans le code (limitée seulement par le parser Next.js) ; rate limiter en mémoire locale par instance (multi-instances multiplierait les quotas) ; export de type inconnu renvoie un 404 en texte brut, pas JSON ; codes 201/500/502 complètent la gamme annoncée 400/401/403/404/429/500 (documentés tels quels).
+   159→- Prochaine action suggérée (Task 24 §6 item 1) : recréer .env.example (AUTH_SECRET, DATABASE_URL) — non traité ici, hors périmètre.
+   160→---
+   161→Task ID: 24
+   162→Agent: orchestrator (Z.ai Code)
+   163→Task: Sprint A — Remise en ordre : recréer la doc perdue, purge des données démo, sauvegardes, en-têtes sécurité, vérification serveur des URLs d'offres (RAPPORT-DEVELOPPEMENT.md §6 items 1/4/5/6/7 + §7 Sprint A)
+   164→
+   165→Work Log:
+   166→- Recon complet : RAPPORT-DEVELOPPEMENT.md (source du Sprint A), schema.prisma (cascades FK, AuditLog/ConsentRecord sans FK → traitements manuels), auth.ts (fallback secret faible), .env (sans AUTH_SECRET), seed.ts (périmètre isDemo), rbac.ts, api-utils, client.ts, routes offers/go/products/partners, bouton « Tester » (toast.info purement informatif), admin-app (indices comptes démo).
+   167→- 24-b : généré AUTH_SECRET fort (64 car. base64url) dans .env ; créé .env.example documenté (DATABASE_URL, AUTH_SECRET, SECURITY_FRAME_ANCESTORS, SECURITY_HSTS, OWNER_EMAIL/PASSWORD). Effet assumé : sessions invalidées → reconnexion.
+   168→- 24-c : next.config.ts headers() — toujours actifs : nosniff, Referrer-Policy strict-origin-when-cross-origin, Permissions-Policy (camera/micro/geolocation/payment/usb/interest-cohort coupés), CSP (default-src 'self', script/style unsafe-inline+unsafe-eval requis par Next, img-src + https: pour CDN partenaires, connect-src 'self', object-src 'none', base-uri/form-action 'self') ; conditionnels : X-Frame-Options SAMEORIGIN + frame-ancestors via SECURITY_FRAME_ANCESTORS (VIDE par défaut — le panneau de prévisualisation intègre le site en iframe cross-origin, cf. jeton X-Session-Token de auth.ts) et HSTS via SECURITY_HSTS=true (HTTPS uniquement). Vérifié par curl : 5 en-têtes présents, pas de frame-ancestors en sandbox.
+   169→- 24-f : créé src/lib/url-guard.ts (isDomainAllowed déplacé d'api-utils — réexport conservé — + isPrivateHost anti-SSRF : boucle locale, RFC1918, link-local 169.254, IPv6 ULA/link-local) ; src/lib/offer-check.ts (HEAD→repli GET, redirections manuelles max 3 revalidées à CHAQUE saut contre la liste blanche + anti-SSRF, timeout 8 s, update urlCheckStatus/urlCheckedAt, audit offers.url_check) ; POST /api/admin/offers/check (catalog.write) ; bouton « Tester » câblé dans products.tsx (appel réel, badge + toasts) ; scripts/check-offer-urls.ts cron-able (exit 2 si liens cassés) ; npm scripts db:backup/db:restore/db:purge-demo/check:offers. Limites documentées : anti-robots 403/429 → faux broken possible (rapport relu par humain, aucune désactivation auto), pas de résolution DNS (rebinding non détecté).
+   170→- 24-a (sous-agent docs-api-contract) : docs/API-CONTRACT.md recréé — 59 endpoints, rate limits réels, 49 actions d'audit, conventions complètes (cf. section 24-a ci-dessus).
+   171→- 24-d : scripts/db-backup.ts (VACUUM INTO copie physique cohérente + export JSON 21 tables + manifeste SHA-256, hachages mots de passe rédigés, fichier 0600, rétention 12) ; scripts/db-restore.ts (--latest/--from, vérification SHA-256 contre manifeste, sauvegarde d'urgence pre-restore avant écrasement, simulation sans --yes) ; 1ère sauvegarde exécutée AVANT purge : backups/backup-20261024-111028 (14 produits, 789 clics, 46 conversions, 4 partenaires…).
+   172→- 24-e : scripts/purge-demo-data.ts — export de traçabilité PUIS suppression ordonnée (consentRecords et crmActivities sans FK d'abord, transactions/conversions/clics/offres/rules/integrations/media/aiAssets, puis contacts/campagnes/produits/partenaires, profils @velmora.demo SAUF rôle owner — garde-fou anti-suppression owner) ; mise à jour du réglage demo_mode_notice → « Catalogue en préparation — les premières offres partenaires arrivent bientôt. » ; simulation puis --yes : 960 enregistrements exportés et supprimés ; contrôle post-purge isDemo=0 ; préservés : 2 contacts CRM réels (lien produit démo détaché via SetNull), 7 catégories, 12 réglages, owner, 48 entrées d'audit, 2 jobs d'import. MAJ admin-app.tsx : bloc « Accès administrateur » remplace la liste des comptes démo.
+   173→- 24-g : README actualisé — démarrage, section Comptes (owner personnel, comptes démo purgés, ⚠️ seed vide TOUTES les tables), section Exploitation Sprint A (backup/restore/purge/check:offers + emplacements backups/), §3 purge, §6 en-têtes sécurité + AUTH_SECRET, §7 checklist cochée, §8 nouveau test vérification URLs, §10 lignes sauvegarde et vérification d'URL désormais opérationnelles.
+   174→- 24-h vérification : tsc 0 erreur (après correction imports node:crypto + référence bun-types dans les 2 scripts) ; lint 0 erreur ; curl en-têtes OK ; E2E API 20/20 via script temporaire (supprimé) : partenaire/produit/2 offres de test → hors liste blanche = broken « Domaine hors liste blanche du partenaire (anti open-redirect) », URL conforme = ok HTTP 200 (réseau sortant réel), statuts persistés, RBAC 401 sans session, nettoyage intégral ; check:offers 0 offre → exit 0 ; E2E navigateur (compte owner TEMPORAIRE créé en base puis supprimé — le mot de passe réel du propriétaire inconnu car rechangé à 10:41:35 par ses soins, jamais réinitialisé ici) : boutique desktop (bandeau neutre, « Aucun produit à afficher pour l'instant. », marquee 96 logos, footer), admin (login MAJ, dashboard zéros propres + interrupteur démo, Produits « Aucun produit — créez-en un. », Paramètres nouveau message + marque OK, Utilisateurs owner seul), bouton « Tester » cliqué réellement → toast « URL joignable — HTTP 200. Statut mis à jour. » + badge « URL vérifiée », mobile 390 px sans débordement, 0 erreur console/page, dev.log sans erreur.
+   175→
+   176→Stage Summary:
+   177→- Sprint A TERMINÉ : les 5 chantiers du rapport sont livrés et vérifiés (doc recréée, purge exécutée, sauvegardes opérationnelles, en-têtes sécurité actifs, vérification serveur des URLs opérationnelle CLI + back-office).
+   178→- Base actuelle : 1 profil (owner cedrickonan44@gmail.com), 0 partenaire/produit/offre/campagne, 2 contacts CRM réels, 7 catégories, 12 réglages, 62 entrées d'audit (trace honnête incluant les actions E2E), 2 jobs d'import. Aucune donnée fictive restante.
+   179→- Artefacts : docs/API-CONTRACT.md, .env.example, scripts/{db-backup,db-restore,purge-demo-data,check-offer-urls}.ts, src/lib/{url-guard,offer-check}.ts, POST /api/admin/offers/check, bouton « Tester » réel, next.config.ts durci, backups/backup-20261024-111028 + demo-export-*.json.
+   180→- Points d'attention pour la suite : AUTH_SECRET changé → toutes les sessions ont été invalidées (reconnexion requise) ; le propriétaire a rechangé son mot de passe lui-même le 24/10 à 10:41 (audit) — ne jamais le réinitialiser sans sa demande ; SECURITY_FRAME_ANCESTORS/SECURITY_HSTS à définir en production ; seed VIDE tout (danger réel, documenté) ; pare-feux anti-robots partenaires → faux « broken » possibles (aucune désactivation automatique) ; planification cron recommandée : sauvegarde 30 4 * * *, vérif URLs 0 4 * * *.
+   181→- Prochaines étapes (Sprint B du rapport) : saisie/imports des VRAIS partenaires + produits + URLs de tracking, taux de change, SMTP, puis Sprint C (MFA, E2E automatisés, monitoring, i18n, rapports avancés).
