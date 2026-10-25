@@ -549,3 +549,23 @@ Stage Summary:
 - Dépôt GitHub Yac1990/VELMORA-LABS en ligne : main @ ba4a82d, historique propre sans secrets (prérequis Vercel atteint).
 - Leçons : fine-grained exige Contents RW + sélection de dépôt ; l'édition d'un fine-grained régénère la valeur ; classique exige le scope repo.
 - Prochaine étape utilisateur : import Vercel (variables d'env cf. DEPLOIEMENT.md §5) + révoquer le jeton GitHub.
+
+---
+Task ID: 30
+Agent: Z.ai Code (orchestrator)
+Task: Déploiement Vercel bloqué (toutes les API en 500) — migration Supabase par fichier SQL sans partage de mot de passe.
+
+Work Log:
+- Diagnostic du site déployé (velmora-labs.vercel.app) : shell statique OK, mais /api/public/settings, /catalog, /rates → 500 corps vide (production masque les détails). Causes probables : variables d'env Vercel manquantes/fausses (surtout DIRECT_URL, nouvelle) et/ou schéma jamais créé sur Supabase.
+- L'utilisateur a fourni successivement (par confusion de navigation) : URL projet Supabase, clés API (publishable/secret/JWT service_role) — jamais les chaînes PostgreSQL. Stratégie changée : ZÉRO credential à partager.
+- scripts/gen-supabase-import.ts créé : introspection information_schema/pg_catalog → DDL fidèle (CREATE TABLE IF NOT EXISTS, PK inline, defaults verbatim, 17 FK en ALTER, index non-PK), données via Prisma en ordre TABLE_ORDER (INSERT ... ON CONFLICT ("id") DO NOTHING, idempotent), types mappés (TIMESTAMPTZ(3), JSONB, VARCHAR...), sérialisation (bool/num/Date ISO/jsonb stringify/échappement ').
+- Fix bug de validation : le filtre de commentaires supprimait le 1er CREATE TABLE (collé au header) → nettoyage ligne à ligne au lieu de jeter le chunk.
+- VALIDATION sur base scratch vml_scratch (CREATE DATABASE → application séquentielle → comparaison des compteurs → DROP) : 22/22 tables OK, 151 lignes identiques (Partner 16, Product 8, ProductOffer 8, Category 7, Setting 14, ExchangeRate 15, AuditLog 71, Profile 1, CrmContact 2...).
+- supabase-import.sql généré : 58 Ko, idempotent. Commit local.
+- Tentative de passage du repo GitHub en privé (données métier dans le fichier) : jeton révoqué par l'utilisateur (bonne hygiène) → Bad credentials → passage en privé reporté sur action utilisateur.
+- Note sécurité transmise : la JWT service_role collée dans le chat devra être régénérée (Settings → API).
+
+Stage Summary:
+- supabase-import.sql prêt et validé : l'utilisateur peut créer schéma + données sur Supabase via l'éditeur SQL SANS me confier aucun mot de passe.
+- Restant : repo GitHub en privé (action utilisateur) + nouveau jeton repo-scope → push du fichier → utilisateur copie depuis GitHub → SQL Editor Supabase → Run → variables Vercel (pooler 6543 + pgbouncer, direct 5432) → Redeploy → re-verification des API.
+- scripts/gen-supabase-import.ts conservé : régénérable à tout moment depuis la base locale (source de vérité).
