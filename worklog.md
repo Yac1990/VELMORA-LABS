@@ -508,3 +508,24 @@ Stage Summary:
 - Caveat production documenté dans proxy.ts + .env.example : AUTH_SECRET est inliné dans le bundle edge au BUILD — après rotation, reconstruire puis redémarrer.
 - Stack restaurée après le reset : PG (velmora), .env 0600, Prisma client, dev server — données intactes (16 partenaires, 8 produits, 8 offres).
 - Artefacts : src/proxy.ts (renforcé), .env.example (recréé), .env (reconstruit). Fichiers temporaires de test supprimés.
+
+---
+Task ID: 28
+Agent: Z.ai Code (orchestrator)
+Task: "le site sera hébergé sur Vercel, la base de données gérée par Supabase" — préparer le déploiement (code + données + guide).
+
+Work Log:
+- prisma/schema.prisma : ajout directUrl = env("DIRECT_URL") (db push/migrations via connexion directe 5432 ; runtime via pooler 6543 — prérequis Supabase serverless).
+- .env local : + DIRECT_URL (= PG local) ; .env.example réécrit avec section Supabase (Transaction pooler 6543 + pgbouncer=true&connection_limit=1&sslmode=require, Direct connection 5432, caveat AUTH_SECRET inliné au build Edge).
+- package.json : + postinstall "prisma generate" (build Vercel) ; scripts db:push/db:migrate/db:reset passés en ${VAR:=fallback .env} (les variables d'environnement préexistantes gagnent — ciblage Supabase possible depuis le shell).
+- Audits d'environnement : le sandbox exporte globalement DATABASE_URL=file:... (pollution) ; précédences vérifiées empiriquement — bun run sans preset → .env gagne ; avec preset / bunx / scripts bun → shell gagne. Méthode de migration retenue : édition temporaire du .env (déterministe quel que soit le shell).
+- bun.lock présent → Vercel utilisera bun automatiquement ; output:"standalone" conservé (inoffensif sur Vercel, utile pour un test local en prod).
+- SÉCURITÉ GIT : découvert que .env (avec mot de passe + AUTH_SECRET), tout db/pgdata et backups/ étaient SUIVIS (1385 fichiers, secrets dans l'historique). .gitignore complété (.env, /db/, /backups/) → git rm --cached → historique reconstruit en 1 commit orphelin propre (243 fichiers, 0 secret — vérifié git ls-files). Aucun remote existant, aucune fuite possible.
+- DEPLOIEMENT.md créé : guide pas-à-pas français (Supabase : projet + 2 URLs ; schéma + restauration data.json backup-20261024-122436 + set-owner ; GitHub ; Vercel : variables + région cdg1 ; domaine/HTTPS ; checklist post-déploiement ; comportements serverless honnêtes : rate-limit par instance, AUTH_SECRET à redéployer après rotation, pause Supabase Free, tracking affilié inactif sans IDs ; dépannage P1001/401/DIRECT_URL).
+- Validation : db:push OK ("in sync", datasource velmora@127.0.0.1), tsc 0, home 200 / catalog 200 / admin 401 (proxy).
+
+Stage Summary:
+- Le projet est DÉPLOYABLE : schéma Prisma prêt pour Supabase (pooler+direct), postinstall Vercel, dépôt git propre sans secrets, guide DEPLOIEMENT.md complet.
+- Ce que l'utilisateur doit faire (seul, ~30-45 min) : créer le projet Supabase, pousser sur GitHub, importer sur Vercel avec les 5 variables, (option) domaine.
+- Migration des données réelles documentée : db:backup → .env→Supabase → db:push → db-restore --from=backup-20261024-122436 → set-owner-credentials → restaurer .env.
+- Notes : credentials .env committés dans l'ANCIEN historique étaient déjà invalidés (rotation faite en Task 27) ; rate-limit login par instance sur serverless (documenté honnêtement).
