@@ -603,3 +603,22 @@ Stage Summary:
 - Aperçu local 100 % fonctionnel (données réelles visibles) — le fichier /demo/velmora-install.sql reste servi (fallback).
 - Déplacement du blocage utilisateur : plan « délégation totale » — Supabase PAT (api.supabase.com/v1 : database/query pour l'import SQL, database/password pour le mot de passe) + Vercel token (api.vercel.com : POST /v10/projects/{id}/env, deploy hook) → tout le reste exécuté par l'orchestrateur ; tokens jamais persistés, à révoquer après succès.
 - Prochaine étape (Task 33 attendue) : exécution du déploiement délégué dès réception des 2 clés.
+
+---
+Task ID: 33
+Agent: Z.ai Code (orchestrator)
+Task: Déploiement délégué — partie Supabase exécutée via Management API (PAT fourni par l'utilisateur).
+
+Work Log:
+- PAT Supabase (sbp_..., fourni dans le chat, jamais persisté) validé : GET /v1/projects → projet VELMORA-LABS (ref wbjyuebbwnfzlqxxnowb), région eu-west-1, PG 17, statut ACTIVE_HEALTHY ; créé via l'intégration Vercel (org vercel_icfg_...).
+- Import SQL : POST /v1/projects/{ref}/database/query avec supabase-import.sql complet (58 Ko) → 201 en une seule requête multi-statements.
+- Vérification : 22 tables, 16 Partners, 8 Products, 8 ProductOffer, 7 Category, 14 Setting, 15 ExchangeRate, 1 Profile — identique à la source.
+- POST database/password → 404 (endpoint inexistant) → bascule sur rôle dédié : velmora_app LOGIN + GRANT ALL TABLES/SEQUENCES + CREATE ON SCHEMA + DEFAULT PRIVILEGES. Pièges rencontrés : SET ROLE interdit via l'endpoint (42501), auto-ADMIN CREATEROLE PG17 rend le GRANT explicite redondant (0LP01) → validation via has_table_privilege() sans SET ROLE : true/true/true.
+- Routage Supavisor : username = {role}.{ref} obligatoire côté pooler ; DNS aws-0 et aws-1 coexistent → test d'auth réel sur 6543 : aws-0-eu-west-1 = AUTH OK (16 partners), aws-1 = tenant not found. Port 6543 sortant OUVERT du sandbox (contrairement à 5432).
+- Certificat pooler : chaîne avec racine non reconnue par Node (rejectUnauthorized requis pour le TEST ; Prisma sslmode=require non vérifiant, standard Supabase — OK en prod).
+- Chaînes finales construites et stockées /tmp/velmora-env.txt (0600, hors git) : DATABASE_URL (pooler 6543 + pgbouncer + connection_limit=1) et DIRECT_URL (db host 5432).
+
+Stage Summary:
+- Base Supabase 100 % installée et testée de bout en bout (auth réelle + lecture données). Aucune action Supabase restante.
+- Restant (Task 34, attend Vercel token) : POST /v10/projects/{id}/env (DATABASE_URL, DIRECT_URL) + redéploiement (deploy hook ou redeploy) + vérification publique des API.
+- Caveat documenté : velmora_app n'est pas owner des tables → migrations futures (db push) à refaire via l'endpoint Management API (compte postgres), pas via DIRECT_URL.
