@@ -586,3 +586,20 @@ Stage Summary:
 - Plan utilisateur réduit à 3 actions dashboard, AUCUN secret dans le chat : (1) ouvrir /demo/velmora-install.sql dans l'aperçu → tout copier ; (2) Supabase SQL Editor → coller → Run (crée 22 tables + 151 lignes réelles) ; (3) Settings → Database → Reset database password → copier les 2 chaînes (Transaction pooler 6543 → DATABASE_URL, Direct 5432 → DIRECT_URL) dans Vercel → Redeploy.
 - Vérification finale possible par moi en 443 (curl des API publiques Vercel) une fois le Redeploy fait.
 - Nettoyage prévu après succès : retirer public/demo/velmora-install.sql du repo + rendre le repo GitHub privé (données métier dans l'historique local 8b67f76 uniquement, pas sur le remote).
+
+---
+Task ID: 32
+Agent: Z.ai Code (orchestrator)
+Task: Réparation environnement post-panne (3e reset) + préparation délégation complète du déploiement (2 tokens).
+
+Work Log:
+- Panne d'outils (broken session 403) pendant ~2 échanges utilisateur : réponse pendant la panne = guide 3 actions + plan SEO, sans exécution.
+- Réparation locale : PostgreSQL embarqué réinstallé via npm embedded-postgres@18.4.0-beta.17 (binaires @embedded-postgres/linux-x64) ; libicu60 extraites d'un .deb Ubuntu 18.04 (dpkg -x, sans root) car binaires liés à ICU 60 absente du système ; initdb -U velmora -A trust ; démarrage pg_ctl port 5432.
+- Import supabase-import.sql validé UNE 2e fois (pg client bun) sur la base fraîche : 22 tables, 16 Partners, 8 Products, 14 Settings.
+- .env reconstruit (postgres local + AUTH_SECRET neuf, 0600). Piège n°3 : variable globale sandbox DATABASE_URL=file:... écrase .env côté process ; de plus un ancien next-server (pid orphelin) occupait le 3000 → kill de l'arbre complet (bun + node next dev + next-server), redémarrage avec env explicite → settings/catalog/rates/categories/home tous 200.
+- Leçon process : `bun run dev` pipe tee/next → kill du wrapper bun laisse next-server orphelin sur le port ; tuer l'arbre (ss -tlnp + ps) avant restart.
+
+Stage Summary:
+- Aperçu local 100 % fonctionnel (données réelles visibles) — le fichier /demo/velmora-install.sql reste servi (fallback).
+- Déplacement du blocage utilisateur : plan « délégation totale » — Supabase PAT (api.supabase.com/v1 : database/query pour l'import SQL, database/password pour le mot de passe) + Vercel token (api.vercel.com : POST /v10/projects/{id}/env, deploy hook) → tout le reste exécuté par l'orchestrateur ; tokens jamais persistés, à révoquer après succès.
+- Prochaine étape (Task 33 attendue) : exécution du déploiement délégué dès réception des 2 clés.
