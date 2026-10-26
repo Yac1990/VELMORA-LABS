@@ -622,3 +622,21 @@ Stage Summary:
 - Base Supabase 100 % installée et testée de bout en bout (auth réelle + lecture données). Aucune action Supabase restante.
 - Restant (Task 34, attend Vercel token) : POST /v10/projects/{id}/env (DATABASE_URL, DIRECT_URL) + redéploiement (deploy hook ou redeploy) + vérification publique des API.
 - Caveat documenté : velmora_app n'est pas owner des tables → migrations futures (db push) à refaire via l'endpoint Management API (compte postgres), pas via DIRECT_URL.
+
+---
+Task ID: 34
+Agent: Z.ai Code (orchestrator)
+Task: Déploiement délégué — partie Vercel (token fourni par l'utilisateur) → SITE EN LIGNE.
+
+Work Log:
+- Token Vercel (vcp_..., chat uniquement, fichier /tmp 0600 supprimé après usage) validé : projet velmora-labs (prj_6i8F6yAHtEs1CO3EJXKzAcRMoEd6, framework nextjs). 0 variable d'environnement existante → cause confirmée des 500.
+- Inventaire process.env (rg src) : AUTH_SECRET requis ; SMTP_* optionnels (dégradation honnête en EmailLog queued) ; NODE_ENV auto. Set retenu : DATABASE_URL, DIRECT_URL, AUTH_SECRET (généré frais, hex 32).
+- POST /v10/projects/{id}/env?upsert=true (type encrypted, targets production+preview+development) → 201, 3 variables créées.
+- Redéploiement : hooks v9 → 404 (non disponible, même par nom de projet) ; méthode retenue : POST /v13/deployments {"deploymentId": <dernier dpl READY>, "target":"production"} → nouveau build ; BUILDING → READY en ~1 min.
+- Vérification production : /api/public/settings 200 (marque + devises EUR/USD/MAD + 7 pays), /catalog 200 (produits réels MyShedPlans...), /rates 200 (source database, frais), /categories 200, homepage 200 ; agent-browser : header/nav/hero rendus, 0 erreur console.
+- Nettoyage : /tmp/*secrets supprimés (pw, token, chaînes) ; tokens à révoquer par l'utilisateur (Supabase PAT + Vercel) — invité avec liens directs.
+
+Stage Summary:
+- VELMORA LABS EN PRODUCTION : velmora-labs.vercel.app branché sur Supabase (pooler aws-0-eu-west-1:6543, rôle velmora_app), données réelles affichées, sessions signées (AUTH_SECRET dédié).
+- Blocage de 3 sessions levé sans que l'utilisateur ne touche un dashboard (2 clés seulement).
+- Suivant : SEO (meta + JSON-LD + sitemap à jour), repo GitHub en privé, rotation/révocation des clés, SMTP optionnel, domaine personnalisé optionnel.
