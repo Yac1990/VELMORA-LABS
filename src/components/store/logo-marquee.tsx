@@ -2,51 +2,42 @@
  * Task 19 → 21 — deux bandes de logos partenaires défilant en sens opposés (pied de page,
  * entre « Comment ça marche ? » et les colonnes de liens — position inchangée).
  *
- * Task 40 — REFONTE PREMIUM (spec utilisateur complète) :
- * - Coque unique premium : fond blanc légèrement bleuté (#F7F9FE), coins arrondis 2xl,
- *   bordure fine teintée bleu marque, ombre très discrète, débordement coupé à la coque.
- * - Séparation fine entre bandes : filet dégradé bleu → violet (identité VELMORA).
- * - Fondus transparents gauche/droite (petits calques STATIQUES superposés, JAMAIS un
- *   mask sur la grande piste — interdit depuis Task 35-bis : corruption GPU Android) :
- *   ils suggèrent que d'autres partenaires arrivent, sans risque GPU.
- * - Survol (desktop uniquement, media (hover:hover) and (pointer:fine)) : la rangée
- *   survolée est SUSPENDUE (moteur, inchangé) et le logo s'agrandit légèrement
- *   (scale 1,06 + opacité pleine, transition 220 ms — aucun zoom excessif).
- *   Infobulle native `title` = nom réel du partenaire (pas de tooltip clippé par
- *   l'overflow de la coque). Tactile : aucune dépendance au survol, le défilement
- *   vertical de la page n'est jamais entravé (aucun touch-action restrictif).
- * - prefers-reduced-motion → bandes STATQUES nativement défilables (tactile/trackpad/
- *   clavier via tabIndex + aria-label bilingue) : les utilisateurs qui limitent les
- *   animations consultent tous les logos sans mouvement continu (spec §4).
- *   NB documenté : le panneau de prévisualisation FORCE cette préférence — il affiche
- *   donc la version statique ; le carrousel animé permanent reste actif sur tout
- *   navigateur standard (décision Task 39 conservée pour le mode animé).
- * - Logos AUTHENTIQUES uniquement : /brands/*.png existants (vérifiés sur disque :
- *   Amazon, Awin, ShareASale, Rakuten, CJ, impact.com, ClickBank, eBay, JUMIA,
- *   Chariow, Kwanko, PartnerStack, TradeDoubler, Admitad, Affilae, Effinity,
- *   Digistore24) — couleurs et proportions d'origine (object-fit: contain),
- *   aucun logo inventé, aucune annonce de partenariat officiel.
- * - Échec de chargement d'une image → remplacement TYPOGRAPHIQUE sobre au nom exact
- *   (état React par slug : les deux moitiés basculent ensemble, la boucle reste
- *   sans couture) ; jamais d'icône cassée, de `undefined`, ni de rangée bloquée.
- *   La liste rendue correspond à des fichiers réellement présents (pas de déduction
- *   à partir d'un simple nom) — si rien n'était disponible, le composant ne rendrait
- *   que l'espace réservé (aucune bande vide ni logo factice).
- * - Boucle sans saut : chaque piste = deux moitiés STRICTEMENT identiques (la seconde
- *   est aria-hidden : aucun contenu accessible dupliqué) ; décalage ramené modulo la
- *   largeur d'une moitié (mesurée, ResizeObserver). Créneaux à largeur fixe → aucun
- *   décalage de mise en page pendant le chargement des images. Vitesses modérées et
- *   légèrement différentes (60 s / 68 s par moitié) pour un mouvement dynamique et
- *   harmonieux — rangée 1 : droite → gauche ; rangée 2 : gauche → droite, TOUJOURS.
- * - Moteur rAF (aucune bibliothèque ajoutée, aucune re-render React par image) :
- *   pause totale pendant le défilement de page (reprise 180 ms), pause hors écran
- *   (IntersectionObserver), onglet masqué (visibilitychange), dt borné à 50 ms.
- * - Aucun titre, aucun texte introductif, aucun bouton — uniquement les logos.
+ * Task 40 — REFONTE PREMIUM : coque unique blanche légèrement bleutée (#F7F9FE), coins
+ * arrondis 1,25 rem, bordure fine teintée bleu marque, ombre très discrète, filet
+ * séparateur dégradé bleu→violet, fondus latéraux en PETITS CALQUES STATIQUES superposés
+ * (JAMAIS un mask sur la grande piste — règle Task 35-bis : corruption GPU Android),
+ * survol desktop (pause de la rangée + zoom léger 1,06 + infobulle native title), repli
+ * typographique au nom exact si une image échoue, créneaux à largeur fixe (zéro CLS),
+ * moteur rAF sans re-render React par image.
+ *
+ * Task 41 — ANIMATION INCONDITIONNELLE (4e signalement : « LES LOGO SONT TOUJOURS
+ * STATIQUE »). Le mode statique « prefers-reduced-motion » (spec Task 40 §4) est
+ * SUPPRIMÉ : le panneau de prévisualisation FORCE cette préférence (documenté Task 20,
+ * reproduit et prouvé Tasks 37-a/39), et le contexte de visualisation du propriétaire la
+ * déclare aussi — chaque version respectant la préférence lui affiche donc un mur statique.
+ * Décision propriétaire (Task 39, réaffirmée ici, priorité sur la spec §4) : l'exigence
+ * explicite de défilement permanent prime. Le moteur rAF est insensible à cette
+ * préférence : le bandeau défile PARTOUT et TOUT LE TEMPS. Accessibilité conservée :
+ * mécanisme de pause au survol (WCAG 2.2.2 « Pause, Stop, Hide »), désormais restreint
+ * aux pointeurs fins — un tap tactile ne fige plus une rangée. La version statique
+ * défilable reste dans l'historique git (commit 1be3de0) et peut être réactivée.
+ *
+ * Boucle sans saut : chaque piste = deux moitiés STRICTEMENT identiques (la seconde est
+ * aria-hidden : aucun contenu accessible dupliqué) ; décalage ramené modulo la largeur
+ * d'une moitié (mesurée, ResizeObserver) ; REPEATS_PER_HALF garantit une demi-largeur ≥
+ * écrans ultra-larges (aucun trou visible). Créneaux à largeur fixe → aucun décalage de
+ * mise en page pendant le chargement des images.
+ *
+ * Logos AUTHENTIQUES uniquement : /brands/*.png existants (vérifiés sur disque) —
+ * couleurs et proportions d'origine (object-fit: contain), aucun logo inventé, aucune
+ * annonce de partenariat officiel. Échec de chargement d'une image → remplacement
+ * TYPOGRAPHIQUE sobre au nom exact (état React par slug : les deux moitiés basculent
+ * ensemble, la boucle reste sans couture) ; jamais d'icône cassée, de `undefined`, ni de
+ * rangée bloquée. Aucun titre, aucun texte introductif, aucun bouton — uniquement les logos.
  */
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { useLang } from "@/store/lang";
 import styles from "./logo-marquee.module.css";
 
 type Brand = { slug: string; name: string };
@@ -86,99 +77,15 @@ const BANDS: { brands: Brand[]; direction: "left" | "right"; durationS: number }
   { brands: BAND_BOTTOM, direction: "right", durationS: 68 },
 ];
 
-/** Bande STATIQUE (animations réduites) : nativement défilable (tactile/trackpad/clavier).
-    Répétition de la séquence MESURÉE (spec §6) : on ne duplique que si une séquence ne
-    remplit pas la largeur visible — jamais de doublons adjacents inutiles sur mobile.
-    Mesure en effet (composant monté uniquement) + ResizeObserver (responsive). */
-function StaticStrip({
-  brands,
-  ariaLabel,
-  renderBrand,
-}: {
-  brands: Brand[];
-  ariaLabel: string;
-  renderBrand: (b: Brand, hidden: boolean) => React.ReactNode;
-}) {
-  const listRef = useRef<HTMLUListElement | null>(null);
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const [repeats, setRepeats] = useState(1);
-
-  useEffect(() => {
-    const compute = () => {
-      const seq = listRef.current?.scrollWidth ?? 0;
-      const visible = stripRef.current?.clientWidth ?? 0;
-      if (seq <= 0 || visible <= 0) return;
-      const needed = seq >= visible ? 1 : Math.min(4, Math.ceil(visible / seq) + 1);
-      setRepeats((prev) => (prev === needed ? prev : needed));
-    };
-    compute();
-    const ro = new ResizeObserver(compute);
-    if (listRef.current) ro.observe(listRef.current);
-    if (stripRef.current) ro.observe(stripRef.current);
-    return () => ro.disconnect();
-  }, []);
-
-  return (
-    <div
-      ref={stripRef}
-      className={`${styles.band} ${styles.bandStatic}`}
-      role="region"
-      tabIndex={0}
-      aria-label={ariaLabel}
-    >
-      {Array.from({ length: repeats }, (_, r) => (
-        <ul
-          key={r}
-          ref={r === 0 ? listRef : undefined}
-          className={styles.half}
-          aria-hidden={r === 0 ? undefined : "true"}
-        >
-          {brands.map((b) => (
-            <li key={b.slug} className={styles.item}>
-              {renderBrand(b, r !== 0)}
-            </li>
-          ))}
-        </ul>
-      ))}
-    </div>
-  );
-}
-
-/* Préférence « animations réduites » (spec Task 40 §4) — abonnement matchMedia unique,
-   snapshot sans setState dans un effet. */
-const reduceSubscribe = (cb: () => void) => {
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const onChange = () => cb();
-  reduced.addEventListener("change", onChange);
-  return () => {
-    reduced.removeEventListener("change", onChange);
-  };
-};
-const reduceSnapshot = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 /* Aucun abonnement réel : bascule du snapshot serveur (false) au snapshot client (true)
    après hydratation — sans setState dans un effet. */
 const emptySubscribe = () => () => {};
-
-const DICT = {
-  fr: {
-    staticStripAria:
-      "Plateformes partenaires — bande horizontale défilable (animations réduites actives)",
-  },
-  en: {
-    staticStripAria:
-      "Partner platforms — horizontally scrollable strip (reduced motion is active)",
-  },
-} as const;
 
 export function LogoMarquee() {
   /* false pendant le rendu serveur ET la première passe client (hydratation sans
      mismatch, getServerSnapshot), puis true au montage : les <img> et leur structure
      ne transitent jamais par l'hydratation. */
   const ready = useSyncExternalStore(emptySubscribe, () => true, () => false);
-  const reduced = useSyncExternalStore(reduceSubscribe, reduceSnapshot, () => false);
-  const { lang } = useLang();
-  const t = DICT[lang];
 
   /* Slugs dont l'image a échoué → remplacement typographique (jamais d'icône cassée).
      Par slug (et non par instance) : les deux moitiés basculent ensemble → boucle intacte. */
@@ -195,6 +102,9 @@ export function LogoMarquee() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const trackRefs = useRef<(HTMLDivElement | null)[]>([null, null]);
   const firstHalfRefs = useRef<(HTMLUListElement | null)[]>([null, null]);
+  /* Pause au survol : desktop à pointeur fin UNIQUEMENT — un tap tactile ne doit jamais
+     figer une rangée (pointerleave/pointercancel tactiles peu fiables). */
+  const hoverFineRef = useRef(false);
   /* État mutable hors React : aucune re-render par image (performances). */
   const engine = useRef({
     offsets: [0, 0],
@@ -203,7 +113,10 @@ export function LogoMarquee() {
   });
 
   useEffect(() => {
-    if (!ready || reduced) return;
+    if (!ready) return;
+    hoverFineRef.current =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     const s = engine.current;
 
     /* Largeur d'une moitié mesurée dynamiquement (chargement des images, responsive). */
@@ -292,7 +205,7 @@ export function LogoMarquee() {
       document.removeEventListener("visibilitychange", onVisibility);
       observer.disconnect();
     };
-  }, [ready, reduced]);
+  }, [ready]);
 
   const setPaused = (index: number, value: boolean) => {
     engine.current.paused[index] = value;
@@ -329,31 +242,29 @@ export function LogoMarquee() {
             <div className={styles.divider} />
             <div className={styles.phBar} />
           </div>
-        ) : reduced ? (
-          /* Animations réduites : bandes STATIQUES nativement défilables (tactile,
-             trackpad, clavier) — consultation complète sans mouvement continu. */
-          BANDS.map((band, i) => (
-            <Fragment key={i}>
-              {i > 0 && <div className={styles.divider} aria-hidden="true" />}
-              <StaticStrip
-                brands={band.brands}
-                ariaLabel={t.staticStripAria}
-                renderBrand={renderBrand}
-              />
-            </Fragment>
-          ))
         ) : (
+          /* Task 41 : animation INCONDITIONNELLE — plus aucune porte prefers-reduced-motion. */
           BANDS.map((band, i) => (
             <Fragment key={i}>
               {i > 0 && <div className={styles.divider} aria-hidden="true" />}
               <div
                 className={styles.band}
                 role="presentation"
-                onPointerEnter={() => setPaused(i, true)}
-                onPointerLeave={() => setPaused(i, false)}
-                onPointerCancel={() => setPaused(i, false)}
+                onPointerEnter={() => {
+                  if (hoverFineRef.current) setPaused(i, true);
+                }}
+                onPointerLeave={() => {
+                  if (hoverFineRef.current) setPaused(i, false);
+                }}
+                onPointerCancel={() => {
+                  if (hoverFineRef.current) setPaused(i, false);
+                }}
               >
-                <div ref={(el) => { trackRefs.current[i] = el; }} className={styles.track}>
+                <div
+                  ref={(el) => { trackRefs.current[i] = el; }}
+                  className={styles.track}
+                  data-testid={`marquee-track-${i}`}
+                >
                   <MarqueeHalf
                     brands={band.brands}
                     halfRef={(el) => { firstHalfRefs.current[i] = el; }}

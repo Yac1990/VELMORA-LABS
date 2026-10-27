@@ -13,6 +13,8 @@
    - Aucun `will-change`, aucun mask, aucun backdrop-filter (Task 35-bis).
    - Mouvement piloté par le moteur rAF du composant (translate3d) : aucune
      animation/keyframes CSS ici.
+   - Task 41 : plus AUCUN mode statique — l'animation est inconditionnelle
+     (décision propriétaire, 4e signalement « logos statiques »).
 
    Palette (identité VELMORA LABS) : bleu #1D52DE, violet #8143E6, blanc/bleuté. */
 
@@ -156,23 +158,6 @@
   .logoText {
     font-size: 0.75rem;
   }
-}
-
-/* Animations réduites : bande STATIQUE nativement défilable (tactile/trackpad) —
-   AUCUNE animation, AUCUN calque promu ; défilement vertical de la page intact
-   (aucun touch-action restrictif). Barres de défilement masquées (esthétique). */
-.bandStatic {
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.bandStatic::-webkit-scrollbar {
-  display: none;
-}
-.bandStatic:focus-visible {
-  outline: 2px solid rgba(29, 82, 222, 0.55);
-  outline-offset: -2px;
 }
 
 /* Fondus transparents gauche/droite : petits calques STATIQUES superposés
