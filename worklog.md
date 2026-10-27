@@ -876,3 +876,22 @@ Stage Summary:
 - Carrousel premium livré conformément aux 10 sections de la spec : deux rangées en sens opposés permanents, coque bleutée arrondie + filet dégradé + fondus latéraux (sans mask GPU), survol doux desktop, statique défilable sous reduced-motion (répétition mesurée), repli typographique sur échec d'image, logos authentiques uniquement (Jumia inclus), zéro CLS, zéro lib ajoutée, position/titre/texte inchangés.
 - Bonus qualité : débordement horizontal pré-existant à 768-1199 px éliminé (header, 3 classNames) — vérifié sur 5 largeurs.
 - Restant : déploiement Vercel en attente d'un nouveau jeton (l'actuel est révoqué) ; committers locaux 5a6ecda (Task 39), 1be3de0 (Task 40).
+
+---
+Task ID: 41
+Agent: orchestrateur (marquee always-on final)
+Task: « LES LOGO SONT TOUJOURS STATIQUE » (4e signalement, capture d'écran à l'appui) — alors que la Task 40 (refonte premium, commit 1be3de0) était livrée et QA-verte 52/52.
+
+Work Log:
+- Diagnostic double : (a) le contexte de visualisation du propriétaire (panneau de prévisualisation) FORCE prefers-reduced-motion:reduce (documenté Task 20, prouvé Tasks 37-a/39) — le mode statique de la spec Task 40 §4 lui affiche donc des rangées figées ; (b) la production n'a toujours pas reçu les Tasks 39/40 : Vercel CLI « Logged out » (re-vérifié aujourd'hui) — la capture envoyée montre l'ANCIEN design (bandes bordées) donc l'ancien build de production.
+- Décision (la dernière consigne du propriétaire l'emporte sur la spec §4) : ANIMATION INCONDITIONNELLE — logo-marquee.tsx : StaticStrip, reduceSubscribe/reduceSnapshot, DICT/useLang supprimés ; effet [ready] uniquement ; plus aucune porte prefers-reduced-motion. Pause au survol conservée (WCAG 2.2.2) mais restreinte aux pointeurs fins (hoverFineRef via matchMedia (hover:hover) and (pointer:fine)) — un tap tactile ne fige plus une rangée. data-testid ajouté aux pistes (marquee-track-0/1).
+- CSS : bloc .bandStatic supprimé ; commentaires Task 41 documentés dans les deux fichiers.
+- Statiques : bun run lint 0/0 ; bunx tsc --noEmit 0 erreur.
+- QA (qa-marquee-41.mjs, 7 contextes Playwright) : 55/55 PASS — 5 largeurs (390/768/1024/1280/1366) : 2 pistes animées, directions opposées mesurées (d0 ≈ −79 à −119 px/1,3 s ; d1 ≈ +62 à +93 px/1,3 s), Jumia=6, fondus=2, headings/text=0, débordement 0 px, 0 erreur console, hero/Comment-ça-marche/footer intacts ; contexte échec (abort chariow.png) : 6 replis « Chariow », 0 img cassée, pistes 2 ; contexte REDUCE (LE cas panneau) : tracks=2, statics=0, ANIME dans les deux sens (d0=−79,6 ; d1=+62,4), 0 erreur ; contexte survol : rangée survolée suspendue (d0=−4,5 px/0,9 s), l'autre continue (d1=+68,2). Captures lues : coque premium arrondie, filet, fondus effectifs.
+- dev.log : uniquement des 200, aucune erreur, aucune alerte d'hydratation.
+- Déploiement : toujours BLOQUÉ — bunx vercel whoami → « Logged out » (jeton révoqué) ; en attente d'un nouveau jeton.
+
+Stage Summary:
+- Le carrousel premium défile désormais PARTOUT, TOUT LE TEMPS (moteur rAF insensible à prefers-reduced-motion) : panneau de prévisualisation, contexte du propriétaire et navigateurs standards voient les deux rangées défiler en sens opposés. Design Task 40 intégralement conservé (coque bleutée arrondie, filet dégradé, fondus latéraux sans mask GPU, survol pause+zoom+infobulle, repli typographique, zéro CLS).
+- Compromis d'accessibilité assumé et documenté (en-tête du composant) : exigence explicite et répétée du propriétaire > spec §4 ; mécanisme de pause au survol conservé ; la version statique défilable reste dans l'historique (commit 1be3de0) et peut être réactivée sur demande.
+- Restant : déploiement Vercel en attente d'un nouveau jeton (whoami → Logged out).
