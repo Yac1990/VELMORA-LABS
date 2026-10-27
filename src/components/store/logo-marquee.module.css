@@ -1,25 +1,72 @@
-/* ── Task 19 + Task 20 : bandes de logos défilants (styles isolés via CSS Modules) ──
+/* ── Task 40 : REFONTE PREMIUM du carrousel de logos (styles isolés via CSS Modules) ──
    Portée stricte : aucune classe globale, aucun effet hors du composant LogoMarquee.
-   Task 20 : le MOUVEMENT est piloté en JavaScript (requestAnimationFrame) dans le
-   composant — plus aucune animation/keyframes CSS ici, car une animation CSS est
-   désactivée par les environnements qui forcent « prefers-reduced-motion »
-   (panneau de prévisualisation), ce qui figeait les bandes. Ce fichier ne conserve
-   que la mise en page, le fondu latéral et le responsive. */
 
-/* Zone d'une bande : contenue, sans débordement, fondu doux sur les bords. */
-.band {
-  overflow: hidden;
-  width: 100%;
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
-  mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
+   Design (spec utilisateur Task 40) :
+   - Coque unique : fond blanc légèrement bleuté #F7F9FE, coins arrondis 1,25 rem,
+     bordure fine teintée bleu marque (#1D52DE à 10 %), ombre très discrète teintée.
+   - Séparation fine entre bandes : filet dégradé bleu → violet (identité VELMORA).
+   - Fondus latéraux : petits calques STATIQUES superposés (JAMAIS un mask sur la
+     grande piste animée — interdit depuis Task 35-bis : corruption GPU Android) ;
+     couleur de départ = fond de la coque (garder synchronisé avec --shell-bg).
+   - Survol (desktop uniquement) : opacité pleine + scale 1,06, transition douce —
+     aucun zoom excessif ; la SUSPENSION de la rangée est gérée par le moteur JS.
+   - Aucun `will-change`, aucun mask, aucun backdrop-filter (Task 35-bis).
+   - Mouvement piloté par le moteur rAF du composant (translate3d) : aucune
+     animation/keyframes CSS ici.
+
+   Palette (identité VELMORA LABS) : bleu #1D52DE, violet #8143E6, blanc/bleuté. */
+
+/* Section : respiration autour de la coque (position inchangée dans le footer). */
+.section {
+  padding: 1.25rem 0.75rem;
+}
+@media (min-width: 640px) {
+  .section {
+    padding: 1.5rem 1.25rem;
+  }
 }
 
-/* Piste : deux moitiés identiques → boucle modulo moitié sans saut (moteur JS). */
+/* Coque premium : coupure du débordement + arrondis au même endroit. */
+.shell {
+  --shell-bg: #f7f9fe; /* blanc légèrement bleuté — synchronisé avec les fondus */
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(29, 82, 222, 0.1);
+  background: var(--shell-bg);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 12px 32px -20px rgba(29, 82, 222, 0.28);
+}
+
+/* Bande : hauteur équilibrée, espacement généreux. */
+.band {
+  position: relative;
+  padding: 0.875rem 0;
+}
+@media (min-width: 1024px) {
+  .band {
+    padding: 1rem 0;
+  }
+}
+
+/* Séparation fine et élégante : filet dégradé bleu → violet (aucune bordure dure). */
+.divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(29, 82, 222, 0) 0%,
+    rgba(29, 82, 222, 0.16) 18%,
+    rgba(129, 67, 230, 0.16) 82%,
+    rgba(129, 67, 230, 0) 100%
+  );
+}
+
+/* Piste animée : deux moitiés identiques → boucle modulo moitié (sans saut). */
 .track {
   display: flex;
   width: max-content;
   align-items: center;
-  will-change: transform;
 }
 
 /* Moitié de piste : liste horizontale sans puces. */
@@ -31,32 +78,145 @@
   list-style: none;
 }
 
+/* Créneau LOGO À LARGEUR FIXE : la piste a sa largeur définitive dès le premier rendu,
+   AVANT même le chargement des images — zéro décalage de mise en page (CLS). */
 .item {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 1.5rem;
+  width: 8.5rem; /* 136 px — mobile */
+  padding: 0;
+}
+@media (min-width: 640px) {
+  .item {
+    width: 11rem; /* 176 px — tablette */
+  }
+}
+@media (min-width: 1024px) {
+  .item {
+    width: 12.5rem; /* 200 px — desktop, espacement généreux */
+  }
 }
 
-/* Logos : hauteur homogène, couleurs d'origine, aucun cadre. */
+/* Logos : couleurs officielles, proportions préservées (object-fit: contain),
+   alignement vertical au centre, jamais déformés. */
 .logo {
   display: block;
-  height: 1.75rem; /* 28 px */
+  height: 1.5rem; /* 24 px — mobile, compact mais lisible */
   width: auto;
-  max-width: 7.5rem; /* 120 px */
+  max-width: 6rem;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
+  opacity: 0.92;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+@media (min-width: 640px) {
+  .logo {
+    height: 1.75rem; /* 28 px */
+    max-width: 7.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  .logo {
+    height: 2rem; /* 32 px — taille confortable */
+    max-width: 8.5rem;
+  }
 }
 
-/* Responsive : logos réduits proportionnellement sur petit écran. */
-@media (max-width: 640px) {
-  .logo {
-    height: 1.375rem; /* 22 px */
-    max-width: 5.75rem; /* 92 px */
+/* Survol : desktop uniquement (jamais déclenché au toucher) — visibilité accrue
+   avec une transition douce, zoom léger 6 % ; la rangée est suspendue par le moteur. */
+@media (hover: hover) and (pointer: fine) {
+  .item:hover .logo,
+  .item:focus-within .logo {
+    opacity: 1;
+    transform: scale(1.06);
   }
-  .item {
-    padding: 0 1rem;
+}
+
+/* Repli typographique (échec de chargement d'une image) : sobre, lisible,
+   au nom EXACT de la plateforme — jamais d'icône cassée ni de `undefined`. */
+.logoText {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 1px rgba(16, 24, 40, 0.03);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #3f4756;
+  user-select: none;
+}
+@media (min-width: 640px) {
+  .logoText {
+    font-size: 0.75rem;
+  }
+}
+
+/* Animations réduites : bande STATIQUE nativement défilable (tactile/trackpad) —
+   AUCUNE animation, AUCUN calque promu ; défilement vertical de la page intact
+   (aucun touch-action restrictif). Barres de défilement masquées (esthétique). */
+.bandStatic {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.bandStatic::-webkit-scrollbar {
+  display: none;
+}
+.bandStatic:focus-visible {
+  outline: 2px solid rgba(29, 82, 222, 0.55);
+  outline-offset: -2px;
+}
+
+/* Fondus transparents gauche/droite : petits calques STATIQUES superposés
+   (pointer-events: none — le survol traverse vers les logos), couleur de départ
+   = fond de la coque → suggèrent que d'autres partenaires arrivent. */
+.fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3rem;
+  pointer-events: none;
+  z-index: 2;
+}
+.fadeLeft {
+  left: 0;
+  background: linear-gradient(90deg, var(--shell-bg) 0%, rgba(247, 249, 254, 0) 100%);
+}
+.fadeRight {
+  right: 0;
+  background: linear-gradient(270deg, var(--shell-bg) 0%, rgba(247, 249, 254, 0) 100%);
+}
+@media (min-width: 640px) {
+  .fade {
+    width: 4.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  .fade {
+    width: 6rem;
+  }
+}
+
+/* Espace réservé serveur : même géométrie que les bandes réelles (zéro CLS au montage).
+   0,875 rem × 2 + logo 1,5 rem = 3,25 rem (mobile) ; 1 rem × 2 + 2 rem = 4 rem (desktop). */
+.phBar {
+  height: 3.25rem;
+}
+@media (min-width: 640px) {
+  .phBar {
+    height: 3.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  .phBar {
+    height: 4rem;
   }
 }
