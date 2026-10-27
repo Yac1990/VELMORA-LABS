@@ -20,11 +20,12 @@ import { TABLE_ORDER } from "./db-shared";
 
 // ── Résolution déterministe de l'URL locale (ignore l'environnement ambiant) ──
 const envText = readFileSync(".env", "utf8");
-const localUrl = envText.match(/^DATABASE_URL=(.*)$/m)?.[1]?.trim();
-if (!localUrl || !localUrl.startsWith("postgresql://")) {
+const localUrlRaw = envText.match(/^DATABASE_URL=(.*)$/m)?.[1]?.trim();
+if (!localUrlRaw || !localUrlRaw.startsWith("postgresql://")) {
   console.error("DATABASE_URL locale introuvable/valide dans .env");
   process.exit(1);
 }
+const localUrl: string = localUrlRaw; // type explicite (utilisable dans les fermetures)
 process.env.DATABASE_URL = localUrl; // pour PrismaClient (url + directUrl)
 
 type Col = {
@@ -92,7 +93,9 @@ async function main() {
      WHERE tc.constraint_type='PRIMARY KEY' AND tc.table_schema='public'
      GROUP BY tc.table_name`
   )).rows;
-  const pkMap = new Map(pks.map(r => [r.table_name, r.pkcols.split(",")]));
+  const pkMap = new Map<string, string[]>(
+    pks.map((r): [string, string[]] => [r.table_name, r.pkcols.split(",")])
+  );
 
   const fks = (await pool.query<{
     table_name: string; column_name: string; ref_table: string;
@@ -118,7 +121,7 @@ async function main() {
   )).rows;
 
   // ── 2. Génération DDL ───────────────────────────────────────────────
-  const tables = [...new Set(cols.map(c => c.table_name))].sort();
+  const tables: string[] = Array.from<string>(new Set<string>(cols.map((c: Col) => c.table_name))).sort();
   const ddl: string[] = [];
   ddl.push(`-- ============================================================`);
   ddl.push(`-- VELMORA LABS — import Supabase (schéma + données réelles)`);

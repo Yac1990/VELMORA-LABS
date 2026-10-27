@@ -13,6 +13,23 @@ function slugify(title: string): string {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
 }
 
+/** Prix lisible pour la notification « nouveau produit » (null si aucun prix connu). */
+function priceLabel(minCents: number | null, maxCents: number | null, currency: string, note: string | null): string | null {
+  const fmt = (cents: number): string => {
+    try {
+      return new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(cents / 100);
+    } catch {
+      return `${(cents / 100).toFixed(2)} ${currency}`;
+    }
+  };
+  const single = minCents ?? maxCents;
+  let label: string | null = null;
+  if (minCents != null && maxCents != null && minCents !== maxCents) label = `${fmt(minCents)} – ${fmt(maxCents)}`;
+  else if (single != null) label = fmt(single);
+  if (!label && note) return note;
+  return note && label ? `${label} ${note}` : label;
+}
+
 export async function GET(req: NextRequest) {
   const guard = await requirePermission(req, "catalog.read");
   if ("error" in guard) return guard.error;
@@ -122,5 +139,32 @@ export async function POST(req: NextRequest) {
   }
 
   await audit(session, "product.create", "product", product.id, { title });
+
+  // Notification « nouveau produit » : relais fire-and-forget vers le mini-service
+  // de chat (socket.io) qui diffuse l'événement aux visiteurs. Ne JAMAIS faire
+  // échouer la création : try/catch, timeout 1,5 s, silencieux si le service est
+  // absent (production sans mini-service, CHAT_SECRET manquante, etc.).
+  try {
+    void fetch("http://127.0.0.1:3003/broadcast", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-chat-secret": process.env.CHAT_SECRET || "",
+      },
+      body: JSON.stringify({
+        type: "new-product",
+        product: {
+          slug: product.slug,
+          title: product.title,
+          image: product.media[0]?.url || null,
+          priceLabel: priceLabel(priceMin, priceMax, product.currency, product.priceNote),
+        },
+      }),
+      signal: AbortSignal.timeout(1500),
+    }).catch(() => {});
+  } catch {
+    // service indisponible — la création reste un succès (données honnêtes : pas d'événement bidon)
+  }
+
   return ok({ product }, { status: 201 });
 }

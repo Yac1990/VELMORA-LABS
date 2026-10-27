@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { ok } from "@/lib/api-utils";
+import { okCached } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,7 @@ export async function GET() {
   const settings = await db.setting.findMany();
   const map: Record<string, string> = {};
   for (const s of settings) map[s.key] = s.value;
-  return ok({
+  return okCached({
     brandName: map.brand_name || "VELMORA LABS",
     brandTagline: map.brand_tagline || "",
     brandLogo: map.brand_logo || "/velmora-logo.png",

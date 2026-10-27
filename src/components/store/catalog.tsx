@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet, formatPriceRange } from "@/lib/client";
 import type { CatalogProduct, CatalogResponse, CategoryInfo, CatalogSeed } from "./store-app";
 import { popularityFor, usePopularity, type PopularityProduct } from "./popularity";
+import { useI18n, productTypeKey, availabilityKey } from "./i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,27 +22,20 @@ import {
 
 /* ─────────────── Étiquettes & helpers partagés ─────────────── */
 
-export const PRODUCT_TYPES: { value: string; label: string }[] = [
-  { value: "digital", label: "Produits numériques" },
-  { value: "training", label: "Formations" },
-  { value: "subscription", label: "Abonnements & SaaS" },
-  { value: "home", label: "Maison" },
-  { value: "electronics", label: "Électronique" },
-  { value: "real_estate", label: "Immobilier" },
-  { value: "vehicle", label: "Véhicules" },
-  { value: "other", label: "Autres" },
+/**
+ * Types de produit — `key` = clé i18n résolue via t() à l'affichage (Task 37-c).
+ * Les données produits restent en base telles quelles ; seule l'interface est traduite.
+ */
+export const PRODUCT_TYPES: { value: string; key: string }[] = [
+  { value: "digital", key: "catalog.type.digital" },
+  { value: "training", key: "catalog.type.training" },
+  { value: "subscription", key: "catalog.type.subscription" },
+  { value: "home", key: "catalog.type.home" },
+  { value: "electronics", key: "catalog.type.electronics" },
+  { value: "real_estate", key: "catalog.type.real_estate" },
+  { value: "vehicle", key: "catalog.type.vehicle" },
+  { value: "other", key: "catalog.type.other" },
 ];
-
-export function productTypeLabel(value: string): string {
-  return PRODUCT_TYPES.find((t) => t.value === value)?.label || "Produit";
-}
-
-/** Libellés de disponibilité — formulations claires pour le visiteur. */
-export function availabilityLabel(availability: string): string {
-  if (availability === "in_stock") return "En stock (selon le vendeur)";
-  if (availability === "out_of_stock") return "Rupture signalée";
-  return "Disponibilité à vérifier sur le site du vendeur";
-}
 
 export function availabilityBadgeClass(availability: string): string {
   if (availability === "in_stock") return "border-emerald-300 bg-emerald-50 text-emerald-700";
@@ -104,9 +98,10 @@ export function PopularityStars({
   popularity: PopularityProduct | null;
   size?: "sm" | "md";
 }) {
+  const { t } = useI18n();
   if (!popularity || popularity.clicks30d <= 0) return null;
   const starCls = size === "md" ? "h-4 w-4" : "h-3 w-3";
-  const label = `Popularité : ${popularity.stars} sur 5, mesurée par ${popularity.clicks30d} clic${popularity.clicks30d > 1 ? "s" : ""} sortant${popularity.clicks30d > 1 ? "s" : ""} vers les offres sur 30 jours. Ce ne sont ni des notes d'acheteurs ni des ventes.`;
+  const label = t("catalog.popularityAria", { stars: popularity.stars, count: popularity.clicks30d });
   return (
     <span className="inline-flex items-center gap-1.5" role="img" aria-label={label}>
       <span className="flex" aria-hidden="true">
@@ -118,7 +113,7 @@ export function PopularityStars({
         ))}
       </span>
       <span className={`tabular-nums text-muted-foreground ${size === "md" ? "text-xs" : "text-[11px]"}`}>
-        {popularity.clicks30d.toLocaleString("fr-FR")} clic{popularity.clicks30d > 1 ? "s" : ""} · 30 j
+        {t("catalog.clicks", { count: popularity.clicks30d })}
       </span>
     </span>
   );
@@ -135,34 +130,37 @@ export function ProductCard({
   onOpen: (slug: string) => void;
   popularity?: PopularityProduct | null;
 }) {
-  const price = formatPriceRange(product.priceMinCents, product.priceMaxCents, product.currency, product.priceNote);
+  const { t, lang } = useI18n();
+  const price = formatPriceRange(product.priceMinCents, product.priceMaxCents, product.currency, product.priceNote, lang);
   const partnerLabel = product.partnerName
     ? product.partnerName
     : product.partnerCount > 1
-      ? `${product.partnerCount} offres disponibles`
-      : "Offre à venir";
+      ? t("catalog.offersCount", { count: product.partnerCount })
+      : t("catalog.offerComing");
   return (
     <button
       type="button"
       onClick={() => onOpen(product.slug)}
       className="group flex w-full flex-col overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label={`Voir la fiche produit : ${product.title}`}
+      aria-label={t("catalog.cardAria", { title: product.title })}
     >
-      <div className="relative aspect-[4/3] w-full overflow-hidden">
+      {/* suppressHydrationWarning : parent direct de l'<img> produit marquée par
+          l'outillage de prévisualisation avant hydratation (Task 36). */}
+      <div className="relative aspect-[4/3] w-full overflow-hidden" suppressHydrationWarning>
         <ProductImage
           src={product.image}
-          alt={`Illustration — ${product.title}`}
+          alt={t("catalog.imageAlt", { title: product.title })}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
         {product.isDemo ? (
           <span className="absolute left-2 top-2">
-            <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">Démo</Badge>
+            <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">{t("common.demoBadge")}</Badge>
           </span>
         ) : null}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-4">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {product.category?.name || productTypeLabel(product.productType)}
+          {product.category?.name || t(productTypeKey(product.productType))}
         </p>
         <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{product.title}</h3>
         {product.shortDescription ? (
@@ -203,6 +201,7 @@ export function CatalogView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef(0);
+  const { t } = useI18n();
 
   const load = useCallback(
     async (opts: { cat: string; type: string; sort: string; page: number; q: string }) => {
@@ -221,13 +220,13 @@ export function CatalogView({
         if (requestRef.current === id) setData(res);
       } catch (e) {
         if (requestRef.current === id) {
-          setError(e instanceof Error ? e.message : "Erreur de chargement du catalogue");
+          setError(e instanceof Error ? e.message : t("catalog.errorFallback"));
         }
       } finally {
         if (requestRef.current === id) setLoading(false);
       }
     },
-    []
+    [t]
   );
 
   useEffect(() => {
@@ -281,11 +280,10 @@ export function CatalogView({
     <div className="mx-auto max-w-6xl px-4 py-8 lg:py-10">
       <header className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">
-          {activeCategory ? activeCategory.name : "Catalogue"}
+          {activeCategory ? activeCategory.name : t("nav.catalogue")}
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          {activeCategory?.description ||
-            "Parcourez les produits et offres de notre sélection multi-catégories. L'achat s'effectue sur le site du vendeur, en un clic."}
+          {activeCategory?.description || t("catalog.descFallback")}
         </p>
       </header>
 
@@ -293,7 +291,7 @@ export function CatalogView({
       <form
         onSubmit={applySearch}
         role="search"
-        aria-label="Filtres du catalogue"
+        aria-label={t("catalog.filtersAria")}
         className="grid gap-3 rounded-2xl border bg-white p-4 shadow-sm md:grid-cols-[1fr_180px_170px_170px]"
       >
         <div className="relative">
@@ -301,17 +299,17 @@ export function CatalogView({
           <Input
             value={qInput}
             onChange={(e) => setQInput(e.target.value)}
-            placeholder="Rechercher un produit…"
-            aria-label="Rechercher dans le catalogue"
+            placeholder={t("header.searchPlaceholder")}
+            aria-label={t("catalog.searchInputAria")}
             className="h-11 pl-9"
           />
         </div>
         <Select value={cat} onValueChange={(v) => { setCat(v); setPage(1); }}>
-          <SelectTrigger className="h-11 w-full" aria-label="Filtrer par catégorie">
-            <SelectValue placeholder="Catégorie" />
+          <SelectTrigger className="h-11 w-full" aria-label={t("catalog.categoryAria")}>
+            <SelectValue placeholder={t("catalog.categoryPlaceholder")} />
           </SelectTrigger>
           <SelectContent className="max-h-72 thin-scrollbar">
-            <SelectItem value="all">Toutes les catégories</SelectItem>
+            <SelectItem value="all">{t("catalog.allCategories")}</SelectItem>
             {categories.map((c) => (
               <SelectItem key={c.slug} value={c.slug}>
                 {c.name} ({c.productCount})
@@ -320,24 +318,24 @@ export function CatalogView({
           </SelectContent>
         </Select>
         <Select value={type} onValueChange={(v) => { setType(v); setPage(1); }}>
-          <SelectTrigger className="h-11 w-full" aria-label="Filtrer par type de produit">
-            <SelectValue placeholder="Type" />
+          <SelectTrigger className="h-11 w-full" aria-label={t("catalog.typeAria")}>
+            <SelectValue placeholder={t("catalog.typePlaceholder")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tous les types</SelectItem>
-            {PRODUCT_TYPES.map((t) => (
-              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+            <SelectItem value="all">{t("catalog.allTypes")}</SelectItem>
+            {PRODUCT_TYPES.map((pt) => (
+              <SelectItem key={pt.value} value={pt.value}>{t(pt.key)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={sort} onValueChange={(v) => { setSort(v); setPage(1); }}>
-          <SelectTrigger className="h-11 w-full" aria-label="Trier les résultats">
-            <SelectValue placeholder="Tri" />
+          <SelectTrigger className="h-11 w-full" aria-label={t("catalog.sortAria")}>
+            <SelectValue placeholder={t("catalog.sortPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="recent">Plus récents</SelectItem>
-            <SelectItem value="price_asc">Prix croissant</SelectItem>
-            <SelectItem value="price_desc">Prix décroissant</SelectItem>
+            <SelectItem value="recent">{t("catalog.sort.recent")}</SelectItem>
+            <SelectItem value="price_asc">{t("catalog.sort.priceAsc")}</SelectItem>
+            <SelectItem value="price_desc">{t("catalog.sort.priceDesc")}</SelectItem>
           </SelectContent>
         </Select>
       </form>
@@ -345,20 +343,18 @@ export function CatalogView({
       {/* Compteur */}
       {!loading && !error ? (
         <p className="mt-4 text-xs text-muted-foreground" role="status">
-          {total} produit{total > 1 ? "s" : ""} trouvé{total > 1 ? "s" : ""}
-          {appliedQ ? ` pour « ${appliedQ} »` : ""}
+          {t("catalog.countLine", { count: total, q: appliedQ })}
         </p>
       ) : null}
       {!loading && !error && popularity && popularity.products.length > 0 ? (
         <p className="mt-1 text-xs text-muted-foreground">
-          ★ = intérêt des visiteurs mesuré par les clics sortants vers les offres (30 derniers jours) —
-          ni des avis d'acheteurs ni des ventes.
+          {t("catalog.starsNote")}
         </p>
       ) : null}
 
       {/* Résultats */}
       {loading ? (
-        <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4" aria-busy="true" aria-label="Chargement des produits">
+        <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4" aria-busy="true" aria-label={t("catalog.loadingAria")}>
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-72 rounded-2xl" />
           ))}
@@ -366,25 +362,25 @@ export function CatalogView({
       ) : error ? (
         <div className="mt-6 rounded-2xl border bg-white p-10 text-center shadow-sm">
           <TriangleAlert className="mx-auto h-10 w-10 text-amber-500" aria-hidden="true" />
-          <h2 className="mt-3 text-lg font-bold">Le catalogue n'a pas pu être chargé</h2>
+          <h2 className="mt-3 text-lg font-bold">{t("catalog.errorTitle")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{error}</p>
           <Button
             variant="outline"
             onClick={() => load({ cat, type, sort, page, q: appliedQ })}
             className="mt-5 gap-2 min-h-[44px]"
           >
-            <RotateCcw className="h-4 w-4" aria-hidden="true" /> Réessayer
+            <RotateCcw className="h-4 w-4" aria-hidden="true" /> {t("common.retry")}
           </Button>
         </div>
       ) : items.length === 0 ? (
         <div className="mt-6 rounded-2xl border bg-white p-10 text-center shadow-sm">
           <PackageSearch className="mx-auto h-10 w-10 text-muted-foreground" aria-hidden="true" />
-          <h2 className="mt-3 text-lg font-bold">Aucun produit ne correspond à votre recherche</h2>
+          <h2 className="mt-3 text-lg font-bold">{t("catalog.emptyTitle")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Essayez d'élargir vos filtres ou de réinitialiser la recherche.
+            {t("catalog.emptyBody")}
           </p>
           <Button variant="outline" onClick={resetFilters} className="mt-5 min-h-[44px]">
-            Réinitialiser les filtres
+            {t("catalog.resetFilters")}
           </Button>
         </div>
       ) : (
@@ -402,7 +398,7 @@ export function CatalogView({
 
       {/* Pagination */}
       {!loading && !error && items.length > 0 && pages > 1 ? (
-        <nav className="mt-8 flex flex-col items-center gap-2" aria-label="Pagination du catalogue">
+        <nav className="mt-8 flex flex-col items-center gap-2" aria-label={t("catalog.paginationAria")}>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <Button
               variant="outline"
@@ -411,7 +407,7 @@ export function CatalogView({
               onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0 }); }}
               className="min-h-[44px] gap-1"
             >
-              <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Précédent
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" /> {t("catalog.prev")}
             </Button>
             {pageNumbers.map((n) => (
               <Button
@@ -420,7 +416,7 @@ export function CatalogView({
                 size="icon"
                 onClick={() => { setPage(n); window.scrollTo({ top: 0 }); }}
                 className="min-h-[44px] min-w-[44px]"
-                aria-label={`Aller à la page ${n}`}
+                aria-label={t("catalog.pageAria", { n })}
                 aria-current={n === page ? "page" : undefined}
               >
                 {n}
@@ -433,11 +429,11 @@ export function CatalogView({
               onClick={() => { setPage((p) => Math.min(pages, p + 1)); window.scrollTo({ top: 0 }); }}
               className="min-h-[44px] gap-1"
             >
-              Suivant <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              {t("catalog.next")} <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Page {page} sur {pages} — devise de référence : {currency}
+            {t("catalog.pageInfo", { page, pages, currency })}
           </p>
         </nav>
       ) : null}

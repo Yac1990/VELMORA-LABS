@@ -20,6 +20,7 @@ import {
   Users, Sparkles, Share2, Settings, UserCog, ScrollText, Store, LogOut, Loader2, Globe, ShieldCheck,
 } from "lucide-react";
 import { DashboardView } from "@/components/admin/views/dashboard";
+import { AdminChat } from "@/components/admin/admin-chat";
 import { ProductsView } from "@/components/admin/views/products";
 import { CategoriesView } from "@/components/admin/views/categories";
 import { PartnersView } from "@/components/admin/views/partners";
@@ -212,6 +213,9 @@ export function AdminApp({ onExitToStore }: { onExitToStore: () => void }) {
           <span>Fuseau horaire de référence : UTC</span>
         </footer>
       </div>
+
+      {/* Chat support (Task 37-d) — flottant, au-dessus de toutes les vues */}
+      <AdminChat />
     </div>
   );
 }

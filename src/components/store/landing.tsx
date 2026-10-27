@@ -4,32 +4,38 @@
  * Accueil type maquette ChronoTask : fond gris très clair, hero centré avec recherche,
  * grille des catégories (icônes lucide mappées), rangées « Nouveautés » et
  * « Les plus consultés », bandeau « Comment ça marche ».
- * Animations d'apparition légères (framer-motion, fade-up au scroll).
+ * Task 36 : apparition au défilement 100 % CSS (classe .reveal), sans framer-motion.
  */
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/client";
 import type { CatalogProduct, CategoryInfo, NavigateFn, StoreSettings } from "./store-app";
 import { ProductCard, categoryIcon } from "./catalog";
 import { popularityFor, usePopularity, type PopularityProduct } from "./popularity";
+import { useI18n } from "./i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { motion } from "framer-motion";
 import { ArrowRight, Eye, PackageSearch, Search, ShieldCheck, Sparkles } from "lucide-react";
 
-function FadeUp({ children, delay = 0, className }: { children: React.ReactNode; delay?: number; className?: string }) {
-  return (
-    <motion.div
-      className={className}
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-48px" }}
-      transition={{ duration: 0.45, delay, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
-  );
+/**
+ * Task 36 — apparition au défilement SANS bibliothèque JS.
+ * Un simple <div> rendu à l'identique côté serveur et client : le contenu est
+ * VISIBLE dès le HTML initial (plus jamais opacity:0 avant hydratation — fin des
+ * sections invisibles puis « pop-in » perçues comme instables sur téléphone).
+ * L'animation éventuelle est purement CSS (classe .reveal dans globals.css) :
+ * - uniquement sur écrans ≥ 1024 px avec animations autorisées (motion réduits exclus),
+ *   pilotée par le défilement dans le composeur (animation-timeline: view()) —
+ *   aucun écouteur de scroll, aucun re-rendu React, aucun calcul JS par frame ;
+ * - téléphones, tablettes et prefers-reduced-motion : AUCUNE animation, contenu
+ *   parfaitement statique et stable au défilement.
+ * framer-motion est supprimé de la boutique entière : le bundle initial perd son
+ * poids (~45 Ko gzip) — chargement plus rapide sur mobile.
+ * `delay` conservé dans l'API pour compatibilité des appels existants (ignoré) : le
+ * minutage éventuel est géré par CSS si besoin un jour.
+ */
+function FadeUp({ children, className }: { children: React.ReactNode; delay?: number; className?: string }) {
+  return <div className={className ? `reveal ${className}` : "reveal"}>{children}</div>;
 }
 
 /* ── Task 17 : illustrations des univers (visuels générés, optimisés WebP). ──
@@ -68,6 +74,7 @@ function CategoryArt({
     <div
       className="flex h-24 w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-b from-sky-50/70 to-violet-50/50"
       aria-hidden="true"
+      suppressHydrationWarning
     >
       <img
         src={src}
@@ -99,6 +106,7 @@ export function LandingView({
   const [recentItems, setRecentItems] = useState<CatalogProduct[] | null>(null);
   const [listError, setListError] = useState(false);
   const { data: popularity, error: popularityError } = usePopularity();
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -140,7 +148,7 @@ export function LandingView({
 
   const disclosure =
     settings.outboundNotice ||
-    "VELMORA LABS regroupe des produits de plusieurs vendeurs dans sept univers. Lorsque vous cliquez sur « Voir l'offre », vous êtes redirigé vers le site du vendeur, où l'achat s'effectue. La redirection est mesurée de façon strictement anonyme.";
+    t("home.disclosureFallback");
 
   return (
     <div>
@@ -150,14 +158,13 @@ export function LandingView({
           <FadeUp>
             <Badge variant="outline" className="mb-4 gap-1.5 border-primary/30 bg-white text-primary">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              Plateforme multi-produits
+              {t("home.badge")}
             </Badge>
             <h1 className="mx-auto max-w-3xl text-4xl font-extrabold tracking-tight lg:text-5xl">
-              {settings.brandTagline || "Découvrez plus. Choisissez mieux."}
+              {settings.brandTagline || t("home.titleFallback")}
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground lg:text-lg">
-              Découvrez et comparez des produits issus de plusieurs vendeurs dans {categories.length || 7} univers.
-              En un clic, rejoignez le site du vendeur pour finaliser votre achat.
+              {t("home.subtitle", { count: categories.length || 7 })}
             </p>
           </FadeUp>
 
@@ -171,29 +178,33 @@ export function LandingView({
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                aria-label="Rechercher un produit"
-                placeholder="E-book, formation, abonnement, appartement…"
+                aria-label={t("header.searchAria")}
+                placeholder={t("home.searchPlaceholder")}
                 className="h-9 border-0 bg-transparent shadow-none focus-visible:ring-0"
               />
               <Button type="submit" className="h-11 shrink-0 rounded-full px-5 min-h-[44px]">
-                Rechercher
+                {t("home.searchButton")}
               </Button>
             </form>
           </FadeUp>
 
           <FadeUp delay={0.14}>
-            <div className="mx-auto mt-8 max-w-4xl overflow-hidden rounded-2xl border shadow-sm">
+            {/* suppressHydrationWarning : parent direct du hero <img> marqué par
+                l'outillage de prévisualisation avant hydratation (Task 36). */}
+            <div className="mx-auto mt-8 max-w-4xl overflow-hidden rounded-2xl border shadow-sm" suppressHydrationWarning>
               {heroFailed ? (
                 <div className="brand-gradient flex aspect-[21/9] w-full flex-col items-center justify-center gap-2.5 text-white" aria-hidden="true">
                   <ShieldCheck className="h-10 w-10 opacity-90" />
                   <p className="text-lg font-semibold">{settings.brandName}</p>
-                  <p className="text-sm opacity-85">Une sélection multi-univers, actualisée en continu</p>
+                  <p className="text-sm opacity-85">{t("home.heroFallbackTagline")}</p>
                 </div>
               ) : (
                 <img
                   src="/demo/hero-velmora.png"
-                  alt="Illustration de la boutique VELMORA — sélection multi-catégories de produits"
+                  alt={t("home.heroImageAlt")}
                   className="aspect-[21/9] w-full object-cover"
+                  loading="eager"
+                  fetchPriority="high"
                   decoding="async"
                   onError={() => setHeroFailed(true)}
                   /* L'outillage de prévisualisation marque les <img> (attributs __processed_*)
@@ -213,16 +224,16 @@ export function LandingView({
             <div>
               <span className="brand-gradient block h-1 w-10 rounded-full" aria-hidden="true" />
               <h2 id="categories-title" className="mt-3 text-2xl font-extrabold tracking-tight lg:text-3xl">
-                Parcourir par <span className="brand-gradient-text">catégorie</span>
+                {t("home.categoriesTitle")} <span className="brand-gradient-text">{t("home.categoriesAccent")}</span>
               </h2>
-              <p className="mt-1.5 text-sm text-muted-foreground">Sept univers, un seul comparateur.</p>
+              <p className="mt-1.5 text-sm text-muted-foreground">{t("home.categoriesSubtitle")}</p>
             </div>
             <Button
               variant="ghost"
               onClick={() => onNavigate("catalog", { catalogCat: "", catalogQuery: "" })}
               className="group min-h-[44px] gap-2 pr-1.5 font-semibold text-primary hover:text-primary"
             >
-              Tout le catalogue
+              {t("home.allCatalog")}
               <span
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/20 bg-primary/5 transition-colors duration-200 group-hover:border-primary group-hover:bg-primary group-hover:text-white motion-reduce:transition-none"
                 aria-hidden="true"
@@ -242,7 +253,7 @@ export function LandingView({
                   type="button"
                   onClick={() => onNavigate("catalog", { catalogCat: c.slug })}
                   className="group flex h-full w-full min-h-[44px] flex-col rounded-2xl border border-border/80 bg-white p-3.5 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-                  aria-label={`Voir les produits de la catégorie ${c.name} (${c.productCount} produit${c.productCount > 1 ? "s" : ""})`}
+                  aria-label={t("home.categoryAria", { name: c.name, count: c.productCount })}
                 >
                   <span
                     className="brand-gradient flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm transition-transform duration-200 group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
@@ -261,7 +272,7 @@ export function LandingView({
 
                   <span className="mt-auto flex items-center justify-between gap-2 pt-3">
                     <span className="whitespace-nowrap rounded-full border border-primary/15 bg-primary/5 px-2.5 py-1 text-[11px] font-semibold text-primary">
-                      {c.productCount} produit{c.productCount > 1 ? "s" : ""}
+                      {t("home.productCount", { count: c.productCount })}
                     </span>
                     <span
                       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted/50 text-muted-foreground transition-colors duration-200 group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground motion-reduce:transition-none"
@@ -285,8 +296,8 @@ export function LandingView({
       {/* ── Nouveautés ── */}
       <ProductRow
         id="nouveautes"
-        title="Nouveautés"
-        subtitle="Les derniers ajouts au catalogue."
+        title={t("home.newTitle")}
+        subtitle={t("home.newSubtitle")}
         icon={Sparkles}
         items={newest}
         error={listError}
@@ -299,11 +310,11 @@ export function LandingView({
       {popular === null || popular.length > 0 ? (
         <ProductRow
           id="plus-consultes"
-          title="Les plus consultés"
+          title={t("home.popularTitle")}
           subtitle={
             popularIsMeasured
-              ? "Classement établi à partir des clics sortants enregistrés vers les offres (30 derniers jours) — ni des ventes ni des avis."
-              : "Une sélection régulièrement consultée par les visiteurs de la boutique."
+              ? t("home.popularSubtitleMeasured")
+              : t("home.popularSubtitleDefault")
           }
           icon={Eye}
           items={popular}
@@ -322,14 +333,14 @@ export function LandingView({
               <ShieldCheck className="h-5 w-5" />
             </span>
             <div>
-              <h2 id="transparence-title" className="text-base font-bold">Comment ça marche ?</h2>
+              <h2 id="transparence-title" className="text-base font-bold">{t("home.howTitle")}</h2>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{disclosure}</p>
               <Button
                 variant="link"
                 onClick={() => onNavigate("legal:disclosure")}
                 className="mt-1 h-auto min-h-[44px] justify-start p-0 text-primary"
               >
-                Découvrir le fonctionnement de la plateforme
+                {t("home.howLink")}
               </Button>
             </div>
           </div>
@@ -362,6 +373,7 @@ function ProductRow({
   onOpenProduct: (slug: string) => void;
   onViewAll: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <section className="mx-auto max-w-6xl px-4 py-6 lg:py-8" aria-labelledby={`${id}-title`}>
       <FadeUp>
@@ -376,7 +388,7 @@ function ProductRow({
             </div>
           </div>
           <Button variant="ghost" onClick={onViewAll} className="min-h-[44px] gap-1.5">
-            Tout voir
+            {t("home.viewAll")}
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
@@ -385,11 +397,11 @@ function ProductRow({
       {error ? (
         <div className="mt-6 rounded-2xl border bg-white p-8 text-center shadow-sm">
           <p className="text-sm text-muted-foreground">
-            Impossible de charger cette sélection pour le moment — le reste de la boutique reste accessible.
+            {t("home.rowError")}
           </p>
         </div>
       ) : items === null ? (
-        <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4" aria-busy="true" aria-label={`Chargement — ${title}`}>
+        <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4" aria-busy="true" aria-label={t("home.rowLoadingAria", { title })}>
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-72 rounded-2xl" />
           ))}
@@ -397,7 +409,7 @@ function ProductRow({
       ) : items.length === 0 ? (
         <div className="mt-6 rounded-2xl border bg-white p-8 text-center shadow-sm">
           <PackageSearch className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
-          <p className="mt-2 text-sm text-muted-foreground">Aucun produit à afficher pour l'instant.</p>
+          <p className="mt-2 text-sm text-muted-foreground">{t("home.rowEmpty")}</p>
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">

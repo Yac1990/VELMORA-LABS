@@ -120,10 +120,19 @@ export async function apiDownload(url: string, filename: string): Promise<void> 
   URL.revokeObjectURL(objectUrl);
 }
 
-export function formatCents(cents: number | null | undefined, currency = "EUR"): string {
-  if (cents === null || cents === undefined) return "Prix inconnu";
+/**
+ * Task 37-c : les helpers de formatage acceptent une langue optionnelle (« fr » par
+ * défaut → comportement inchangé pour l'admin) ; la boutique passe « en » pour des
+ * prix/dates/formatages de nombres localisés côté EN.
+ */
+export type UiLang = "fr" | "en";
+
+const intlLocale = (lang: UiLang): string => (lang === "en" ? "en-US" : "fr-FR");
+
+export function formatCents(cents: number | null | undefined, currency = "EUR", lang: UiLang = "fr"): string {
+  if (cents === null || cents === undefined) return lang === "en" ? "Unknown price" : "Prix inconnu";
   try {
-    return new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(cents / 100);
+    return new Intl.NumberFormat(intlLocale(lang), { style: "currency", currency }).format(cents / 100);
   } catch {
     return `${(cents / 100).toFixed(2)} ${currency}`;
   }
@@ -133,18 +142,19 @@ export function formatPriceRange(
   minCents: number | null | undefined,
   maxCents: number | null | undefined,
   currency = "EUR",
-  note?: string | null
+  note?: string | null,
+  lang: UiLang = "fr"
 ): string {
   if (minCents != null && maxCents != null && minCents !== maxCents) {
-    return `${formatCents(minCents, currency)} – ${formatCents(maxCents, currency)}${note ? ` ${note}` : ""}`;
+    return `${formatCents(minCents, currency, lang)} – ${formatCents(maxCents, currency, lang)}${note ? ` ${note}` : ""}`;
   }
-  return `${formatCents(minCents ?? maxCents, currency)}${note ? ` ${note}` : ""}`;
+  return `${formatCents(minCents ?? maxCents, currency, lang)}${note ? ` ${note}` : ""}`;
 }
 
-export function formatDate(iso: string | Date | null | undefined): string {
+export function formatDate(iso: string | Date | null | undefined, lang: UiLang = "fr"): string {
   if (!iso) return "—";
   try {
-    return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(iso)) + " UTC";
+    return new Intl.DateTimeFormat(intlLocale(lang), { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(iso)) + " UTC";
   } catch {
     return "—";
   }

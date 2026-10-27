@@ -12,7 +12,7 @@
  * Cache mémoire local de 60 s (données agrégées et non personnelles).
  */
 import { db } from "@/lib/db";
-import { ok } from "@/lib/api-utils";
+import { okCached } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +32,7 @@ let cache: { at: number; data: unknown } | null = null;
 
 export async function GET() {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
-    return ok(cache.data);
+    return okCached(cache.data);
   }
 
   const since = new Date(Date.now() - PERIOD_DAYS * 86_400_000);
@@ -54,7 +54,7 @@ export async function GET() {
       products: [] as PopularityEntry[],
     };
     cache = { at: Date.now(), data: empty };
-    return ok(empty);
+    return okCached(empty);
   }
 
   const offers = await db.productOffer.findMany({
@@ -105,5 +105,5 @@ export async function GET() {
   };
 
   cache = { at: Date.now(), data: data };
-  return ok(data);
+  return okCached(data);
 }

@@ -4,9 +4,11 @@
  * Formulaire de demande de renseignements — produits allowInquiry (immobilier / véhicules).
  * La case de consentement est OBLIGATOIRE : après acceptation, les coordonnées sont
  * transmises au vendeur concerné (cf. POST /api/public/inquiry).
+ * Task 37-c : libellés, consentement et messages de retour traduits (FR/EN).
  */
 import { useState } from "react";
 import { apiPost } from "@/lib/client";
+import { useI18n } from "./i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,19 +33,20 @@ export function InquiryForm({
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const { t } = useI18n();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim().length < 2) {
-      toast.error("Merci d'indiquer votre nom.");
+      toast.error(t("form.errorName"));
       return;
     }
     if (!EMAIL_RE.test(email.trim())) {
-      toast.error("Adresse e-mail invalide.");
+      toast.error(t("form.errorEmail"));
       return;
     }
     if (!consent) {
-      toast.error("Votre consentement est requis pour transmettre votre demande au vendeur.");
+      toast.error(t("inquiry.errorConsent"));
       return;
     }
     setSubmitting(true);
@@ -56,11 +59,11 @@ export function InquiryForm({
         message: message.trim(),
         consent: true,
       });
-      const msg = res.message || "Votre demande a été enregistrée. Le vendeur ou notre équipe vous recontactera.";
+      const msg = res.message || t("inquiry.successFallback");
       setDone(msg);
       toast.success(msg);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Échec de l'envoi — réessayez dans quelques instants.");
+      toast.error(err instanceof Error ? err.message : t("inquiry.errorSend"));
     } finally {
       setSubmitting(false);
     }
@@ -68,11 +71,9 @@ export function InquiryForm({
 
   return (
     <div className="rounded-2xl border bg-white p-5 shadow-sm lg:p-6" aria-labelledby="inquiry-title">
-      <h2 id="inquiry-title" className="text-lg font-bold tracking-tight">Demander des renseignements</h2>
+      <h2 id="inquiry-title" className="text-lg font-bold tracking-tight">{t("inquiry.title")}</h2>
       <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        Ce produit est proposé par un vendeur. Envoyez votre demande via VELMORA LABS :
-        après votre consentement explicite, vos coordonnées sont transmises au vendeur,
-        qui vous recontacte directement. Aucun achat ne se fait sur VELMORA LABS.
+        {t("inquiry.body")}
       </p>
 
       {done ? (
@@ -84,15 +85,15 @@ export function InquiryForm({
           <p>{done}</p>
         </div>
       ) : (
-        <form onSubmit={submit} className="mt-4 space-y-4" aria-label="Formulaire de demande de renseignements">
+        <form onSubmit={submit} className="mt-4 space-y-4" aria-label={t("inquiry.formAria")}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="inquiry-name">Nom complet *</Label>
+              <Label htmlFor="inquiry-name">{t("form.nameLabel")}</Label>
               <Input
                 id="inquiry-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Votre nom"
+                placeholder={t("form.namePlaceholder")}
                 autoComplete="name"
                 required
                 minLength={2}
@@ -101,13 +102,13 @@ export function InquiryForm({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="inquiry-email">E-mail *</Label>
+              <Label htmlFor="inquiry-email">{t("form.emailLabel")}</Label>
               <Input
                 id="inquiry-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="vous@exemple.com"
+                placeholder={t("form.emailPlaceholder")}
                 autoComplete="email"
                 required
                 maxLength={180}
@@ -117,13 +118,13 @@ export function InquiryForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="inquiry-phone">Téléphone (facultatif)</Label>
+            <Label htmlFor="inquiry-phone">{t("inquiry.phoneLabel")}</Label>
             <Input
               id="inquiry-phone"
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+33 6 12 34 56 78"
+              placeholder={t("inquiry.phonePlaceholder")}
               autoComplete="tel"
               maxLength={40}
               className="min-h-[44px]"
@@ -131,12 +132,12 @@ export function InquiryForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="inquiry-message">Votre message</Label>
+            <Label htmlFor="inquiry-message">{t("form.messageLabel")}</Label>
             <Textarea
               id="inquiry-message"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Précisez votre demande : visite, disponibilité, options…"
+              placeholder={t("inquiry.messagePlaceholder")}
               rows={4}
               maxLength={2000}
             />
@@ -154,17 +155,15 @@ export function InquiryForm({
               htmlFor="inquiry-consent"
               className="cursor-pointer text-xs font-normal leading-relaxed text-amber-900"
             >
-              J'accepte que mes informations (nom, adresse e-mail et téléphone si renseigné) soient
-              transmises au vendeur de « {productTitle} » afin d'être recontacté(e) au sujet
-              de ma demande. Ce consentement est nécessaire pour envoyer le formulaire ; je peux le
-              retirer à tout moment via la page Contact. Consultez notre{" "}
-              <span className="font-medium underline underline-offset-2">politique de confidentialité</span>.
+              {t("inquiry.consentA", { product: productTitle })}
+              <span className="font-medium underline underline-offset-2">{t("common.privacyLink")}</span>
+              {t("inquiry.consentC")}
             </Label>
           </div>
 
           <Button type="submit" disabled={submitting} className="w-full gap-2 min-h-[44px] sm:w-auto sm:px-6">
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
-            Envoyer ma demande
+            {t("inquiry.submit")}
           </Button>
         </form>
       )}

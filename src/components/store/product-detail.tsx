@@ -9,8 +9,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, formatCents, formatDate, formatPriceRange } from "@/lib/client";
 import type { NavigateFn, ProductDetailData, StoreSettings } from "./store-app";
-import { availabilityBadgeClass, availabilityLabel, productTypeLabel, PopularityStars, ProductImage } from "./catalog";
+import { availabilityBadgeClass, PopularityStars, ProductImage } from "./catalog";
 import { popularityFor, usePopularity } from "./popularity";
+import { useI18n, availabilityKey, productTypeKey } from "./i18n";
 import { InquiryForm } from "./inquiry-form";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,7 @@ export function ProductDetailView({
   const [error, setError] = useState<string | null>(null);
   const [imgIndex, setImgIndex] = useState(0);
   const { data: popularity } = usePopularity();
+  const { t, lang } = useI18n();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,11 +51,11 @@ export function ProductDetailView({
       setData(res);
       setImgIndex(0);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur de chargement du produit");
+      setError(e instanceof Error ? e.message : t("product.errorFallback"));
     } finally {
       setLoading(false);
     }
-  }, [slug]);
+  }, [slug, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -70,18 +72,18 @@ export function ProductDetailView({
       <div className="mx-auto max-w-xl px-4 py-16">
         <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
           <TriangleAlert className="mx-auto h-10 w-10 text-amber-500" aria-hidden="true" />
-          <h2 className="mt-3 text-lg font-bold">{notFound ? "Produit introuvable" : "Erreur de chargement"}</h2>
+          <h2 className="mt-3 text-lg font-bold">{notFound ? t("product.notFoundTitle") : t("product.errorTitle")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {notFound
-              ? "Ce produit n'existe plus ou n'est pas publié. Il a peut-être été retiré du catalogue."
+              ? t("product.notFoundBody")
               : error}
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Button variant="outline" onClick={load} className="min-h-[44px] gap-2">
-              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Réessayer
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> {t("common.retry")}
             </Button>
             <Button onClick={() => onNavigate("catalog")} className="min-h-[44px] gap-2">
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Retour au catalogue
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" /> {t("product.backToCatalog")}
             </Button>
           </div>
         </div>
@@ -95,14 +97,14 @@ export function ProductDetailView({
       <div className="mx-auto max-w-xl px-4 py-16">
         <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
           <TriangleAlert className="mx-auto h-10 w-10 text-amber-500" aria-hidden="true" />
-          <h2 className="mt-3 text-lg font-bold">Erreur de chargement</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{error || "Réessayez dans un instant."}</p>
+          <h2 className="mt-3 text-lg font-bold">{t("product.errorTitle")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{error || t("product.errorBodyFallback")}</p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Button variant="outline" onClick={load} className="min-h-[44px] gap-2">
-              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Réessayer
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> {t("common.retry")}
             </Button>
             <Button onClick={() => onNavigate("catalog")} className="min-h-[44px] gap-2">
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Retour au catalogue
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" /> {t("product.backToCatalog")}
             </Button>
           </div>
         </div>
@@ -113,7 +115,7 @@ export function ProductDetailView({
   const media = data.media ?? [];
   const current = media[imgIndex] ?? media[0] ?? null;
   const availability = globalAvailability(data.offers);
-  const price = formatPriceRange(data.priceMinCents, data.priceMaxCents, data.currency, data.priceNote);
+  const price = formatPriceRange(data.priceMinCents, data.priceMaxCents, data.currency, data.priceNote, lang);
   const hasRange = data.priceMinCents != null && data.priceMaxCents != null && data.priceMinCents !== data.priceMaxCents;
   const pop = popularityFor(popularity?.products, data.id);
 
@@ -124,7 +126,7 @@ export function ProductDetailView({
         onClick={() => onNavigate("catalog")}
         className="-ml-2 mb-4 min-h-[44px] gap-2"
       >
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Retour au catalogue
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> {t("product.backToCatalog")}
       </Button>
 
       <div className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
@@ -134,26 +136,26 @@ export function ProductDetailView({
             <ProductImage
               key={current?.url || "empty"}
               src={current?.url ?? null}
-              alt={current?.altText || `Illustration — ${data.title}`}
+              alt={current?.altText || t("catalog.imageAlt", { title: data.title })}
               className="aspect-[4/3] w-full object-cover"
               iconClassName="h-14 w-14"
             />
           </div>
           {media.length > 1 ? (
-            <div className="flex gap-2 overflow-x-auto pb-1 thin-scrollbar" role="listbox" aria-label="Vignettes du produit">
+            <div className="flex gap-2 overflow-x-auto pb-1 thin-scrollbar" role="listbox" aria-label={t("product.thumbsAria")}>
               {media.map((m, i) => (
                 <button
                   key={m.url}
                   type="button"
                   onClick={() => setImgIndex(i)}
                   className={`h-16 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition ${i === imgIndex ? "border-primary" : "border-transparent opacity-75 hover:opacity-100"}`}
-                  aria-label={`Afficher l'image ${i + 1} sur ${media.length}`}
+                  aria-label={t("product.thumbAria", { index: i + 1, total: media.length })}
                   aria-selected={i === imgIndex}
                   role="option"
                 >
                   <ProductImage
                     src={m.url}
-                    alt={m.altText || `Miniature ${i + 1} — ${data.title}`}
+                    alt={m.altText || t("product.thumbAlt", { index: i + 1, title: data.title })}
                     className="h-full w-full object-cover"
                     iconClassName="h-5 w-5"
                   />
@@ -169,10 +171,10 @@ export function ProductDetailView({
             {data.category ? (
               <span className="inline-flex items-center gap-1.5">{data.category.name}</span>
             ) : (
-              productTypeLabel(data.productType)
+              t(productTypeKey(data.productType))
             )}
             <span aria-hidden="true">·</span>
-            <span className="normal-case">{productTypeLabel(data.productType)}</span>
+            <span className="normal-case">{t(productTypeKey(data.productType))}</span>
           </p>
 
           <h1 className="mt-2 text-2xl font-bold tracking-tight lg:text-3xl">{data.title}</h1>
@@ -182,17 +184,17 @@ export function ProductDetailView({
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {data.isDemo ? (
-              <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">Démo</Badge>
+              <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">{t("common.demoBadge")}</Badge>
             ) : null}
             <Badge variant="outline" className={availabilityBadgeClass(availability)}>
-              {availabilityLabel(availability)}
+              {t(availabilityKey(availability))}
             </Badge>
           </div>
           {pop ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <PopularityStars popularity={pop} size="md" />
               <span className="text-[11px] text-muted-foreground">
-                Intérêt des visiteurs — mesuré par les clics sortants, pas une note d'acheteurs.
+                {t("product.interestNote")}
               </span>
             </div>
           ) : null}
@@ -206,19 +208,19 @@ export function ProductDetailView({
             ) : null}
             {hasRange ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                Fourchette indicative — le prix final est celui affiché sur le site du vendeur.
+                {t("product.rangeNote")}
               </p>
             ) : null}
           </div>
 
           <Separator className="my-4" />
 
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Description</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("product.descriptionTitle")}</h2>
           <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-foreground/85">{data.description}</p>
 
           {data.features.length > 0 ? (
             <>
-              <h2 className="mt-5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Caractéristiques</h2>
+              <h2 className="mt-5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("product.featuresTitle")}</h2>
               <dl className="mt-2 grid gap-2 sm:grid-cols-2">
                 {data.features.map((f, i) => (
                   <div key={i} className="rounded-xl border bg-white px-3 py-2">
@@ -232,9 +234,9 @@ export function ProductDetailView({
 
           <div className="mt-5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Mis à jour le {formatDate(data.updatedAt)}</span>
+            <span>{t("product.updated", { date: formatDate(data.updatedAt, lang) })}</span>
             <span aria-hidden="true">·</span>
-            <span>Langue : {data.language.toUpperCase()}</span>
+            <span>{t("product.language", { lang: data.language.toUpperCase() })}</span>
           </div>
 
           {data.countries.length > 0 ? (
@@ -259,10 +261,10 @@ export function ProductDetailView({
           </span>
           <div>
             <h2 id="offers-title" className="text-xl font-bold tracking-tight">
-              Offres disponibles ({data.offers.length})
+              {t("product.offersTitle", { count: data.offers.length })}
             </h2>
             <p className="text-xs text-muted-foreground">
-              L'achat, le paiement et le service après-vente s'effectuent sur le site du vendeur.
+              {t("product.offersNote")}
             </p>
           </div>
         </div>
@@ -271,7 +273,7 @@ export function ProductDetailView({
           <div className="mt-4 rounded-2xl border bg-white p-8 text-center shadow-sm">
             <PackageSearch className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
             <p className="mt-2 text-sm text-muted-foreground">
-              Aucune offre active pour ce produit actuellement — revenez bientôt.
+              {t("product.noOffers")}
             </p>
           </div>
         ) : (
@@ -285,20 +287,20 @@ export function ProductDetailView({
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{o.partnerName}</p>
                     {o.partnerIsDemo ? (
-                      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">Démo</Badge>
+                      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">{t("common.demoBadge")}</Badge>
                     ) : null}
                     <Badge variant="outline" className={availabilityBadgeClass(o.availability)}>
-                      {availabilityLabel(o.availability)}
+                      {t(availabilityKey(o.availability))}
                     </Badge>
                   </div>
                   {o.priceCents != null ? (
                     <p className="mt-0.5 text-sm">
-                      Prix sur le site du vendeur : <span className="font-semibold">{formatCents(o.priceCents, o.currency)}</span>
+                      {t("product.offerPrice", { price: formatCents(o.priceCents, o.currency, lang) })}
                     </p>
                   ) : null}
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Dernière synchronisation : {formatDate(o.lastSyncedAt)}
-                    {o.urlCheckStatus === "broken" ? " — lien en cours de vérification" : ""}
+                    {t("product.lastSync", { date: formatDate(o.lastSyncedAt, lang) })}
+                    {o.urlCheckStatus === "broken" ? t("product.linkChecking") : ""}
                   </p>
                   {o.commission.termsUrl ? (
                     <a
@@ -307,7 +309,7 @@ export function ProductDetailView({
                       rel="noopener noreferrer"
                       className="mt-0.5 inline-block text-xs text-primary underline underline-offset-2"
                     >
-                      Conditions de l'offre
+                      {t("product.offerTerms")}
                     </a>
                   ) : null}
                 </div>
@@ -315,10 +317,10 @@ export function ProductDetailView({
                 <div className="shrink-0 space-y-1.5 sm:text-right">
                   <Button onClick={() => goToOffer(o.id)} className="w-full gap-2 min-h-[44px] sm:w-auto">
                     <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                    Voir sur {o.partnerName}
+                    {t("product.viewOn", { partner: o.partnerName })}
                   </Button>
                   <p className="max-w-xs text-[11px] leading-snug text-muted-foreground sm:ml-auto">
-                    Vous serez redirigé vers le site du vendeur pour finaliser votre achat.
+                    {t("product.redirectNote")}
                   </p>
                 </div>
               </div>
@@ -338,8 +340,9 @@ export function ProductDetailView({
 }
 
 function DetailSkeleton() {
+  const { t } = useI18n();
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8" aria-busy="true" aria-label="Chargement de la fiche produit">
+    <div className="mx-auto max-w-6xl px-4 py-8" aria-busy="true" aria-label={t("product.loadingAria")}>
       <Skeleton className="mb-4 h-9 w-44 rounded-full" />
       <div className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
         <div className="space-y-3">

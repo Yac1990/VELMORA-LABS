@@ -15,6 +15,23 @@ export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json(JSON.parse(JSON.stringify(data ?? null, jsonReplacer)), init);
 }
 
+/**
+ * Cache CDN Vercel pour les réponses publiques GET peu volatiles (routes /api/public/*).
+ * - s-maxage=120 : la réponse est servie depuis le cache edge pendant 2 min (latence
+ *   quasi nulle, aucune invocation serverless) ;
+ * - stale-while-revalidate=300 : une réponse périmée est servie immédiatement pendant
+ *   qu'une fraîche est recalculée en arrière-plan (aucun « coup de froid » visible).
+ * Les URLs avec paramètres (catalogue : ?cat=&q=&page=) sont cachées par URL — le
+ * contenu public ne varie pas à cette échelle de temps.
+ */
+export const PUBLIC_CACHE_HEADERS: Record<string, string> = {
+  "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+};
+
+export function okCached<T>(data: T, extraHeaders?: Record<string, string>) {
+  return ok(data, { headers: { ...PUBLIC_CACHE_HEADERS, ...extraHeaders } });
+}
+
 export function err(message: string, status = 400, extra?: Record<string, unknown>) {
   return NextResponse.json({ error: message, ...extra }, { status });
 }

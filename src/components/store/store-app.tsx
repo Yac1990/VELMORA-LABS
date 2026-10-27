@@ -11,6 +11,8 @@ import { apiGet } from "@/lib/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RotateCcw, TriangleAlert } from "lucide-react";
+import { useLang } from "@/store/lang";
+import { useI18n } from "./i18n";
 import { StoreHeader } from "./header";
 import { StoreFooter } from "./footer";
 import { LandingView } from "./landing";
@@ -18,6 +20,8 @@ import { CatalogView } from "./catalog";
 import { ProductDetailView } from "./product-detail";
 import { LegalPage, type LegalKind } from "./legal";
 import { FaqView, ContactView } from "./contact-view";
+import { InstallPrompt } from "./install-prompt";
+import { SupportChat } from "./support-chat";
 
 /* ─────────────── Types partagés (formes exactes des API publiques) ─────────────── */
 
@@ -158,6 +162,9 @@ function parseStoreHash(): { view: StoreView; productSlug: string | null; cat: s
 /* ─────────────── Racine ─────────────── */
 
 export function StoreApp({ onOpenAdmin }: { onOpenAdmin: () => void }) {
+  /* Langue de la boutique (Task 37-c) : « fr » côté SSR + hydratation, puis langue
+     persistée après montage — voir src/store/lang.ts. */
+  const { lang, mounted } = useLang();
   const [view, setView] = useState<StoreView>("home");
   const [productSlug, setProductSlug] = useState<string | null>(null);
   const [catalogSeed, setCatalogSeed] = useState<CatalogSeed>({ cat: null, q: null, ts: 0 });
@@ -233,6 +240,25 @@ export function StoreApp({ onOpenAdmin }: { onOpenAdmin: () => void }) {
     [navigate]
   );
 
+  /* Task 37-c — attribut lang du document synchronisé APRÈS le montage uniquement
+     (jamais pendant le rendu, jamais côté serveur : le <html> SSR n'est pas modifié).
+     L'effet ne s'exécute qu'une fois `mounted` vrai (garde anti-hydratation), puis à
+     chaque changement de langue. */
+  useEffect(() => {
+    if (mounted) document.documentElement.lang = lang;
+  }, [lang, mounted]);
+
+  /* Task 37-d — ouverture d'un produit demandée par la cloche de notifications
+     (événement personnalisé « velmora:open-product », détail { slug }). */
+  useEffect(() => {
+    const onOpenProduct = (e: Event) => {
+      const slug = (e as CustomEvent<{ slug?: string }>).detail?.slug;
+      if (slug) navigate("product", { productSlug: slug });
+    };
+    window.addEventListener("velmora:open-product", onOpenProduct);
+    return () => window.removeEventListener("velmora:open-product", onOpenProduct);
+  }, [navigate]);
+
   return (
     <div className="flex min-h-screen flex-col bg-zinc-100">
       {/* Bandeau fin de démonstration (transparence — jamais masquable) */}
@@ -296,6 +322,11 @@ export function StoreApp({ onOpenAdmin }: { onOpenAdmin: () => void }) {
       </main>
 
       <StoreFooter settings={settings} onNavigate={navigate} />
+
+      {/* Task 37 — popup d'installation PWA (première visite) et chat support en direct.
+          Composants autonomes, rendus après le montage uniquement (hydratation sûre). */}
+      <InstallPrompt />
+      <SupportChat onOpenContact={() => navigate("contact")} />
     </div>
   );
 }
@@ -303,8 +334,9 @@ export function StoreApp({ onOpenAdmin }: { onOpenAdmin: () => void }) {
 /* ─────────────── États de démarrage ─────────────── */
 
 function BootSkeleton() {
+  const { t } = useI18n();
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 lg:py-14" aria-busy="true" aria-label="Chargement de la boutique">
+    <div className="mx-auto max-w-6xl px-4 py-10 lg:py-14" aria-busy="true" aria-label={t("boot.loadingAria")}>
       <div className="mx-auto max-w-2xl space-y-3 text-center">
         <Skeleton className="mx-auto h-6 w-52 rounded-full" />
         <Skeleton className="mx-auto h-12 w-full max-w-xl" />
@@ -326,17 +358,18 @@ function BootSkeleton() {
 }
 
 function BootError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="mx-auto max-w-xl px-4 py-16 lg:py-24">
       <div className="rounded-2xl border bg-white p-8 text-center shadow-sm">
         <TriangleAlert className="mx-auto h-10 w-10 text-amber-500" aria-hidden="true" />
-        <h2 className="mt-3 text-lg font-bold">Impossible de charger la boutique</h2>
+        <h2 className="mt-3 text-lg font-bold">{t("boot.errorTitle")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Les paramètres du site n'ont pas pu être récupérés. Vérifiez votre connexion, puis réessayez.
+          {t("boot.errorBody")}
         </p>
         <Button onClick={onRetry} className="mt-5 gap-2 min-h-[44px]">
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
-          Réessayer
+          {t("common.retry")}
         </Button>
       </div>
     </div>

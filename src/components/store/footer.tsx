@@ -3,24 +3,11 @@
 /**
  * Pied de page VELMORA LABS — collé en bas (le parent gère min-h-screen flex flex-col).
  * Liens légaux, message « Comment ça marche », © année dynamique, safe-area iOS.
+ * Task 37-c : libellés et texte de transparence traduits (FR/EN).
  */
 import type { NavigateFn, StoreSettings, StoreView } from "./store-app";
 import { LogoMarquee } from "./logo-marquee";
-
-const LEGAL_LINKS: { view: StoreView; label: string }[] = [
-  { view: "legal:privacy", label: "Politique de confidentialité" },
-  { view: "legal:terms", label: "Conditions d'utilisation" },
-  { view: "legal:disclosure", label: "Fonctionnement de la plateforme" },
-  { view: "legal:cookies", label: "Politique cookies" },
-];
-
-const SITE_LINKS: { view: StoreView; label: string; opts?: Parameters<NavigateFn>[1] }[] = [
-  { view: "home", label: "Accueil" },
-  { view: "catalog", label: "Catalogue", opts: { catalogCat: "", catalogQuery: "" } },
-  { view: "faq", label: "FAQ" },
-  { view: "contact", label: "Contact" },
-  { view: "legal:about", label: "À propos" },
-];
+import { useI18n } from "./i18n";
 
 export function StoreFooter({
   settings,
@@ -29,12 +16,29 @@ export function StoreFooter({
   settings: StoreSettings | null;
   onNavigate: NavigateFn;
 }) {
+  const { t } = useI18n();
   const year = new Date().getFullYear();
   const brandName = settings?.brandName || "VELMORA LABS";
   const logo = settings?.brandLogo || "/velmora-logo.png";
   const disclosure =
     settings?.outboundNotice ||
-    "VELMORA LABS regroupe des produits de plusieurs vendeurs. Lorsque vous cliquez sur « Voir l'offre », vous êtes redirigé vers le site du vendeur, où l'achat s'effectue. L'achat ne se fait jamais sur VELMORA LABS.";
+    t("footer.disclosureFallback");
+
+  /* Liens — libellés traduits (la vue reste la clé stable). */
+  const legalLinks: { view: StoreView; label: string }[] = [
+    { view: "legal:privacy", label: t("footer.linkPrivacy") },
+    { view: "legal:terms", label: t("footer.linkTerms") },
+    { view: "legal:disclosure", label: t("footer.linkDisclosure") },
+    { view: "legal:cookies", label: t("footer.linkCookies") },
+  ];
+
+  const siteLinks: { view: StoreView; label: string; opts?: Parameters<NavigateFn>[1] }[] = [
+    { view: "home", label: t("nav.home") },
+    { view: "catalog", label: t("nav.catalogue"), opts: { catalogCat: "", catalogQuery: "" } },
+    { view: "faq", label: t("nav.faq") },
+    { view: "contact", label: t("nav.contact") },
+    { view: "legal:about", label: t("nav.about") },
+  ];
 
   const linkClass =
     "inline-flex min-h-[44px] items-center py-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground";
@@ -46,17 +50,19 @@ export function StoreFooter({
       <div className="border-t">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 md:grid-cols-[1.5fr_1fr_1fr]">
           <div>
-            <div className="flex items-center gap-2.5">
-              <img src={logo} alt={`Logo ${brandName}`} className="h-9 w-9 rounded-lg object-cover shadow-sm" suppressHydrationWarning />
+            {/* suppressHydrationWarning : parent direct d'une <img> marquée par l'outillage
+                de prévisualisation avant hydratation (Task 36). */}
+            <div className="flex items-center gap-2.5" suppressHydrationWarning>
+              <img src={logo} alt={t("header.logoAlt", { brand: brandName })} className="h-9 w-9 rounded-lg object-cover shadow-sm" suppressHydrationWarning />
               <span className="brand-gradient-text font-bold">{brandName}</span>
             </div>
             <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">{disclosure}</p>
           </div>
 
-          <nav aria-label="Liens de la boutique">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-foreground/70">Boutique</p>
+          <nav aria-label={t("footer.shopAria")}>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-foreground/70">{t("footer.shopTitle")}</p>
             <ul className="space-y-0.5">
-              {SITE_LINKS.map((l) => (
+              {siteLinks.map((l) => (
                 <li key={l.view}>
                   <button type="button" onClick={() => onNavigate(l.view, l.opts)} className={linkClass}>
                     {l.label}
@@ -66,10 +72,10 @@ export function StoreFooter({
             </ul>
           </nav>
 
-          <nav aria-label="Informations légales">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-foreground/70">Informations légales</p>
+          <nav aria-label={t("footer.legalAria")}>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-foreground/70">{t("footer.legalTitle")}</p>
             <ul className="space-y-0.5">
-              {LEGAL_LINKS.map((l) => (
+              {legalLinks.map((l) => (
                 <li key={l.view}>
                   <button type="button" onClick={() => onNavigate(l.view)} className={linkClass}>
                     {l.label}
@@ -83,8 +89,8 @@ export function StoreFooter({
 
       <div className="border-t">
         <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-[11px] leading-relaxed text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>© {year} {brandName}. Tous droits réservés.</p>
-          <p>Prix indicatifs fournis par les vendeurs — vérifiez toujours le prix final sur leur site.</p>
+          <p>{t("footer.copyright", { year, brand: brandName })}</p>
+          <p>{t("footer.priceNotice")}</p>
         </div>
       </div>
     </footer>

@@ -7,7 +7,7 @@
  */
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ok, err, parseJsonArray } from "@/lib/api-utils";
+import { okCached, err, parseJsonArray } from "@/lib/api-utils";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { getLatestRates, FX_BASE_CURRENCY } from "@/lib/fx";
 
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) filtered[code] = rate;
   }
 
-  return ok({
+  return okCached({
     base: FX_BASE_CURRENCY,
     source: rates.source,
     provider: rates.provider,

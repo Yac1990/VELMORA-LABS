@@ -1,0 +1,30 @@
+{
+  "name": "VELMORA LABS",
+  "short_name": "VELMORA",
+  "description": "Plateforme multi-produits internationale : produits numériques, formations, abonnements, maison, électronique, immobilier et véhicules, regroupés depuis des vendeurs partenaires vérifiés. L'achat final s'effectue sur le site du vendeur partenaire choisi.",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f4f5",
+  "theme_color": "#1D52DE",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

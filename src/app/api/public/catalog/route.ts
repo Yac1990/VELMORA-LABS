@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ok, err, parseJsonArray } from "@/lib/api-utils";
+import { okCached, err, parseJsonArray } from "@/lib/api-utils";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  return ok({
+  return okCached({
     items: products.map((p) => ({
       id: p.id, slug: p.slug, title: p.title,
       shortDescription: p.shortDescription,

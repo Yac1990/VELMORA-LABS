@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { ok } from "@/lib/api-utils";
+import { okCached } from "@/lib/api-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export async function GET() {
     orderBy: { sortOrder: "asc" },
     include: { _count: { select: { products: { where: { status: "published" } } } } },
   });
-  return ok({
+  return okCached({
     items: categories.map((c) => ({
       id: c.id, slug: c.slug, name: c.name, icon: c.icon,
       description: c.description,
