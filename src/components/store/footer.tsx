@@ -7,7 +7,7 @@
  */
 import type { NavigateFn, StoreSettings, StoreView } from "./store-app";
 import { LogoMarquee } from "./logo-marquee";
-import { useI18n } from "./i18n";
+import { useI18n, seedAware, SEED_DEFAULTS } from "./i18n";
 
 export function StoreFooter({
   settings,
@@ -20,9 +20,12 @@ export function StoreFooter({
   const year = new Date().getFullYear();
   const brandName = settings?.brandName || "VELMORA LABS";
   const logo = settings?.brandLogo || "/velmora-logo.png";
-  const disclosure =
-    settings?.outboundNotice ||
-    t("footer.disclosureFallback");
+  const disclosure = seedAware(
+    settings?.outboundNotice,
+    SEED_DEFAULTS.outbound,
+    "footer.disclosureFallback",
+    t
+  );
 
   /* Liens — libellés traduits (la vue reste la clé stable). */
   const legalLinks: { view: StoreView; label: string }[] = [

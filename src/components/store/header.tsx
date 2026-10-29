@@ -3,13 +3,16 @@
 /**
  * En-tête de la boutique publique : logo, marque (paramètres publics), recherche
  * (ouvre le catalogue avec q), menu catégories (dropdown desktop / sheet mobile),
- * liens FAQ / Contact / À propos, sélecteur de langue FR|EN (Task 37-c) et bouton
- * icône discret d'accès administrateur.
+ * liens FAQ / Contact / À propos, sélecteur de langue en menu déroulant à drapeaux
+ * (Task 42 — FR 🇫🇷 / EN 🇬🇧, remplace le contrôle segmenté de la Task 37-c) et
+ * bouton icône discret d'accès administrateur.
  */
 import { useState } from "react";
+import type { ComponentType } from "react";
 import type { CategoryInfo, NavigateFn, StoreSettings, StoreView } from "./store-app";
 import { categoryIcon } from "./catalog";
-import { useI18n } from "./i18n";
+import { useI18n, seedAware, SEED_DEFAULTS } from "./i18n";
+import { FlagFR, FlagGB } from "./flags";
 import type { Lang } from "@/store/lang";
 import { NotificationBell } from "./notification-bell";
 import { Button } from "@/components/ui/button";
@@ -21,41 +24,67 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, Menu, Search, UserCog } from "lucide-react";
+import { Check, ChevronDown, Menu, Search, UserCog } from "lucide-react";
 
-/* ─────────────── Sélecteur de langue (Task 37-c) ─────────────── */
+/* ─────────────── Sélecteur de langue (Task 42) ─────────────── */
+
+interface LangOption {
+  code: Lang;
+  Flag: ComponentType<{ className?: string }>;
+  labelKey: string;
+}
+
+/** Deux langues disponibles — drapeau SVG + libellé natif (« Français », « English »). */
+const LANG_OPTIONS: LangOption[] = [
+  { code: "fr", Flag: FlagFR, labelKey: "lang.fr" },
+  { code: "en", Flag: FlagGB, labelKey: "lang.en" },
+];
 
 /**
- * Contrôle segmenté compact FR | EN — bascule instantanée (état client zustand,
- * persistée). aria-pressed sur chaque option, libellés bilingues assumés.
- * Cibles tactiles ≥ 44 px (min-h/min-w).
+ * Menu déroulant compact à drapeaux (Task 42) : le déclencheur affiche la langue
+ * courante (drapeau + code), le menu liste chaque langue avec son drapeau, son
+ * nom natif et une coche sur l'option active. La bascule est instantanée (état
+ * zustand persisté « velmora-lang ») — TOUTES les sections de la boutique se
+ * re-rendent automatiquement (elles lisent la langue via useI18n()/useLang()).
+ * Cible tactile ≥ 44 px ; fermeture au clic extérieur / Échap (Radix).
  */
 function LangSwitcher() {
   const { lang, setLang, t } = useI18n();
-  const options: Lang[] = ["fr", "en"];
+  const active = LANG_OPTIONS.find((o) => o.code === lang) ?? LANG_OPTIONS[0];
   return (
-    <div
-      role="group"
-      aria-label={t("lang.aria")}
-      className="inline-flex items-center rounded-full border border-border bg-white p-0.5 text-xs"
-    >
-      {options.map((l) => (
-        <button
-          key={l}
-          type="button"
-          onClick={() => setLang(l)}
-          aria-pressed={lang === l}
-          aria-label={t(l === "fr" ? "lang.fr" : "lang.en")}
-          className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full px-2 text-[11px] font-semibold uppercase tracking-wide transition-colors ${
-            lang === l
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          aria-label={t("lang.aria")}
+          title={t("lang.label")}
+          className="h-11 gap-2 rounded-full px-3.5 text-xs font-semibold"
         >
-          {l.toUpperCase()}
-        </button>
-      ))}
-    </div>
+          <active.Flag />
+          <span className="tracking-wide">{active.code.toUpperCase()}</span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-48 p-1.5">
+        <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {t("lang.label")}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {LANG_OPTIONS.map(({ code, Flag, labelKey }) => (
+          <DropdownMenuItem
+            key={code}
+            aria-pressed={lang === code}
+            aria-label={t(labelKey)}
+            className="cursor-pointer gap-2.5 py-2.5"
+            onSelect={() => setLang(code)}
+          >
+            <Flag />
+            <span className="flex-1 text-sm">{t(labelKey)}</span>
+            {lang === code ? <Check className="h-4 w-4 text-primary" aria-hidden="true" /> : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -77,6 +106,10 @@ export function StoreHeader({
   const { t } = useI18n();
   const brandName = settings?.brandName || "VELMORA LABS";
   const logo = settings?.brandLogo || "/velmora-logo.png";
+  /* Tagline seed-aware (Task 42) : suit la langue tant que l'admin ne l'a pas personnalisée. */
+  const tagline = settings
+    ? seedAware(settings.brandTagline, SEED_DEFAULTS.tagline, "home.titleFallback", t)
+    : "";
 
   /* Liens principaux — libellés traduits (la vue reste la clé stable). */
   const mainLinks: { view: StoreView; label: string; opts?: Parameters<NavigateFn>[1] }[] = [
@@ -134,8 +167,8 @@ export function StoreHeader({
           <img src={logo} alt={t("header.logoAlt", { brand: brandName })} className="h-9 w-9 rounded-lg object-cover shadow-sm" suppressHydrationWarning />
           <span className="flex flex-col items-start leading-tight">
             <span className="brand-gradient-text whitespace-nowrap text-sm font-bold sm:text-base">{brandName}</span>
-            {settings?.brandTagline ? (
-              <span className="hidden whitespace-nowrap text-[11px] text-muted-foreground sm:block">{settings.brandTagline}</span>
+            {tagline ? (
+              <span className="hidden whitespace-nowrap text-[11px] text-muted-foreground sm:block">{tagline}</span>
             ) : null}
           </span>
         </button>
@@ -172,7 +205,7 @@ export function StoreHeader({
             </div>
           </form>
 
-          {/* Langue FR | EN (desktop, discret à côté de la recherche / des catégories) */}
+          {/* Langue — menu déroulant à drapeaux (desktop, à côté de la recherche) */}
           <div className="hidden md:inline-flex">
             <LangSwitcher />
           </div>
@@ -235,13 +268,13 @@ export function StoreHeader({
               <img src={logo} alt={t("header.logoAlt", { brand: brandName })} className="h-9 w-9 rounded-lg object-cover" suppressHydrationWarning />
               <span className="brand-gradient-text font-bold">{brandName}</span>
             </SheetTitle>
-            {settings?.brandTagline ? (
-              <SheetDescription className="text-xs">{settings.brandTagline}</SheetDescription>
+            {tagline ? (
+              <SheetDescription className="text-xs">{tagline}</SheetDescription>
             ) : null}
           </SheetHeader>
 
           <div className="space-y-6 p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-            {/* Langue (Task 37-c) — rangée dédiée en haut du sheet */}
+            {/* Langue (Task 42) — menu déroulant à drapeaux, rangée dédiée en haut du sheet */}
             <div className="flex items-center justify-between gap-3">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("lang.label")}

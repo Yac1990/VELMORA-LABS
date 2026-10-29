@@ -11,7 +11,7 @@ import { apiGet } from "@/lib/client";
 import type { CatalogProduct, CategoryInfo, NavigateFn, StoreSettings } from "./store-app";
 import { ProductCard, categoryIcon } from "./catalog";
 import { popularityFor, usePopularity, type PopularityProduct } from "./popularity";
-import { useI18n } from "./i18n";
+import { useI18n, seedAware, SEED_DEFAULTS } from "./i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -146,9 +146,12 @@ export function LandingView({
     onNavigate("catalog", { catalogQuery: q.trim() || undefined });
   };
 
-  const disclosure =
-    settings.outboundNotice ||
-    t("home.disclosureFallback");
+  const disclosure = seedAware(
+    settings.outboundNotice,
+    SEED_DEFAULTS.outbound,
+    "home.disclosureFallback",
+    t
+  );
 
   return (
     <div>
@@ -161,7 +164,7 @@ export function LandingView({
               {t("home.badge")}
             </Badge>
             <h1 className="mx-auto max-w-3xl text-4xl font-extrabold tracking-tight lg:text-5xl">
-              {settings.brandTagline || t("home.titleFallback")}
+              {seedAware(settings.brandTagline, SEED_DEFAULTS.tagline, "home.titleFallback", t)}
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground lg:text-lg">
               {t("home.subtitle", { count: categories.length || 7 })}

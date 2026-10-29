@@ -974,6 +974,33 @@ const EN: Widen<typeof FR> = {
 
 const DICTS: Record<Lang, Dict> = { fr: FR, en: EN };
 
+/* ───────────────── Valeurs FR du seed initial (miroir de prisma/seed.ts) ───────────────── */
+
+const SEED_TAGLINE_FR = "Découvrez plus. Choisissez mieux.";
+
+const SEED_OUTBOUND_FR =
+  "VELMORA LABS regroupe des produits de plusieurs vendeurs dans sept univers. Lorsque vous cliquez sur « Voir l'offre », vous êtes redirigé vers le site du vendeur, où l'achat s'effectue. La redirection est mesurée de façon strictement anonyme.";
+
+export const SEED_DEFAULTS = { tagline: SEED_TAGLINE_FR, outbound: SEED_OUTBOUND_FR } as const;
+
+/**
+ * Paramètre admin « seed-aware » (Task 42) : si la valeur est vide OU correspond
+ * encore au texte FR posé par le seed initial (jamais personnalisée), on rend la
+ * traduction i18n — sinon le contenu réellement personnalisé par l'admin s'affiche
+ * tel quel, quelle que soit la langue (principe « honest data » : seules les
+ * valeurs non personnalisées suivent la langue de l'interface).
+ */
+export function seedAware(
+  raw: string | null | undefined,
+  seedFr: string,
+  i18nKey: string,
+  t: (key: string, vars?: I18nVars) => string
+): string {
+  const value = (raw ?? "").trim();
+  if (!value || value === seedFr) return t(i18nKey);
+  return value;
+}
+
 /* ─────────────────────────────── Hook public ─────────────────────────────── */
 
 /** Remplace les jetons {nom} par les valeurs fournies (sans toucher aux inconnus). */
