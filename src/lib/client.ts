@@ -88,6 +88,16 @@ export async function apiPut<T>(url: string, body: unknown): Promise<T> {
   }));
 }
 
+/**
+ * Task 44 : téléverse des fichiers en multipart/form-data avec la session
+ * (cookie + en-tête de repli). Aucun « Content-Type » manuel : le navigateur
+ * génère lui-même l'en-tête multipart avec sa frontière (boundary).
+ */
+export async function apiUpload<T>(url: string, form: FormData): Promise<T> {
+  const res = await fetch(url, { method: "POST", body: form, headers: authHeaders() });
+  return handle<T>(res);
+}
+
 export async function apiDelete<T>(url: string): Promise<T> {
   return handle<T>(await fetch(url, { method: "DELETE", headers: authHeaders() }));
 }

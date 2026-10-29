@@ -4,9 +4,9 @@
  * Vue Produits — liste filtrable, création/édition complète (produit + médias + fonctionnalités),
  * gestion des offres par partenaire, actions de publication (RBAC côté serveur en dernier recours).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  apiDelete, apiGet, apiPost, apiPut, formatDate, formatPriceRange,
+  apiDelete, apiGet, apiPost, apiPut, apiUpload, formatDate, formatPriceRange,
 } from "@/lib/client";
 import { CURRENCIES } from "@/lib/money";
 import { hasPermission } from "@/lib/rbac";
@@ -26,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
-  Archive, Check, ImageOff, Link2, Loader2, Package, Pencil, Plus, Search, Trash2, TriangleAlert, X,
+  Archive, Check, ImageOff, Link2, Loader2, Package, Pencil, Plus, Search, Trash2, TriangleAlert, Upload, X,
 } from "lucide-react";
 
 /* ───────────────────────── Types & libellés ───────────────────────── */
@@ -158,6 +158,9 @@ export function ProductsView({ user }: { user: AdminUser }) {
   const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  // Task 44 : téléversement d'images produit (1 à 5 fichiers par action)
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
 
   // Offres (mode édition)
   const [offers, setOffers] = useState<OfferDraft[]>([]);
@@ -240,6 +243,52 @@ export function ProductsView({ user }: { user: AdminUser }) {
       setDialogOpen(false);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  /* Task 44 — téléversement d'images produit : 1 à 5 fichiers par clic, stockés
+     côté serveur (POST /api/admin/uploads) puis ajoutés comme médias du formulaire.
+     Le texte alternatif est pré-rempli avec le nom de fichier (sans extension) —
+     modifiable ensuite comme pour une URL manuelle. */
+  const MAX_MEDIA = 10; // cohérent avec la limite serveur (slice(0, 10) dans les routes produit)
+  const uploadMediaFiles = async (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    const files = Array.from(list);
+    if (mediaInputRef.current) mediaInputRef.current.value = ""; // permet de re-sélectionner le même fichier
+    if (files.length > 5) {
+      toast.error("Sélectionnez 1 à 5 images par téléversement.");
+      return;
+    }
+    if (form.media.length + files.length > MAX_MEDIA) {
+      toast.error(`Maximum ${MAX_MEDIA} visuels par produit (${form.media.length} déjà présent${form.media.length > 1 ? "s" : ""}).`);
+      return;
+    }
+    for (const file of files) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`« ${file.name} » dépasse 5 Mo.`);
+        return;
+      }
+    }
+    setUploadingMedia(true);
+    try {
+      const fd = new FormData();
+      for (const file of files) fd.append("files", file);
+      const res = await apiUpload<{ urls: string[] }>("/api/admin/uploads", fd);
+      setForm((f) => ({
+        ...f,
+        media: [
+          ...f.media,
+          ...res.urls.map((url, i) => ({
+            url,
+            altText: (files[i]?.name ?? "").replace(/\.[^.]+$/, "").trim().slice(0, 160),
+          })),
+        ],
+      }));
+      toast.success(`${res.urls.length} image${res.urls.length > 1 ? "s" : ""} téléversée${res.urls.length > 1 ? "s" : ""}.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec du téléversement.");
+    } finally {
+      setUploadingMedia(false);
     }
   };
 
@@ -692,23 +741,52 @@ export function ProductsView({ user }: { user: AdminUser }) {
 
               <Separator />
 
-              {/* Médias */}
+              {/* Médias — Task 44 : téléversement 1 à 5 images en un clic, ou URL manuelle */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Médias (URL + texte alternatif)</Label>
-                  <Button type="button" variant="outline" size="sm"
-                    onClick={() => setForm((f) => ({ ...f, media: [...f.media, { url: "", altText: "" }] }))}>
-                    <Plus className="h-3.5 w-3.5" /> Ajouter un média
-                  </Button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label>Médias du produit ({form.media.filter((m) => m.url.trim()).length}/{MAX_MEDIA})</Label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={mediaInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => void uploadMediaFiles(e.target.files)}
+                    />
+                    {canWrite ? (
+                      <Button type="button" variant="outline" size="sm" disabled={uploadingMedia}
+                        onClick={() => mediaInputRef.current?.click()}
+                        title="Choisir 1 à 5 images (JPEG, PNG, WebP, AVIF ou GIF — 5 Mo max par fichier)">
+                        {uploadingMedia ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                        {uploadingMedia ? "Téléversement…" : "Téléverser 1 à 5 images"}
+                      </Button>
+                    ) : null}
+                    <Button type="button" variant="outline" size="sm" disabled={form.media.length >= MAX_MEDIA}
+                      onClick={() => setForm((f) => ({ ...f, media: [...f.media, { url: "", altText: "" }] }))}>
+                      <Plus className="h-3.5 w-3.5" /> Ajouter par URL
+                    </Button>
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
+                  Cliquez sur « Téléverser 1 à 5 images » pour choisir d’un coup une à cinq photos du produit
+                  (JPEG, PNG, WebP, AVIF ou GIF — 5 Mo max par fichier), ou collez une URL.
                   Astuce : les visuels générés par IA sont servis depuis <code>/demo/…</code> (dossier public/demo).
                   Suggestion : <code>/demo/velmora-{form.slug || "produit"}.jpg</code>
                 </p>
                 {form.media.length === 0 && <p className="text-xs text-muted-foreground">Aucun média — un visuel générique sera affiché en boutique.</p>}
                 {form.media.map((m, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <Input placeholder="URL (ex. /demo/velmora-x.jpg)" value={m.url}
+                    {m.url.trim() ? (
+                      /* Aperçu miniature ; suppressHydrationWarning : parent direct d'une <img>
+                         marquée par l'outillage de prévisualisation avant hydratation (Task 36). */
+                      <img src={m.url} alt="" loading="lazy" className="h-10 w-10 shrink-0 rounded-md border object-cover" suppressHydrationWarning />
+                    ) : (
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border text-muted-foreground" aria-hidden="true">
+                        <ImageOff className="h-4 w-4" />
+                      </span>
+                    )}
+                    <Input placeholder="URL (ex. /uploads/xxxx.jpg)" value={m.url}
                       onChange={(e) => setForm((f) => ({ ...f, media: f.media.map((x, j) => j === i ? { ...x, url: e.target.value } : x) }))} />
                     <Input placeholder="Texte alternatif" value={m.altText}
                       onChange={(e) => setForm((f) => ({ ...f, media: f.media.map((x, j) => j === i ? { ...x, altText: e.target.value } : x) }))} />

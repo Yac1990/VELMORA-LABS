@@ -12,6 +12,7 @@ import type { NavigateFn, ProductDetailData, StoreSettings } from "./store-app";
 import { availabilityBadgeClass, PopularityStars, ProductImage } from "./catalog";
 import { popularityFor, usePopularity } from "./popularity";
 import { useI18n, availabilityKey, productTypeKey } from "./i18n";
+import { localizeProductFields, localizeCategoryName } from "./seed-content";
 import { InquiryForm } from "./inquiry-form";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -115,7 +116,11 @@ export function ProductDetailView({
   const media = data.media ?? [];
   const current = media[imgIndex] ?? media[0] ?? null;
   const availability = globalAvailability(data.offers);
-  const price = formatPriceRange(data.priceMinCents, data.priceMaxCents, data.currency, data.priceNote, lang);
+  /* Task 44 : textes du produit localisés (seed → EN) — la valeur personnalisée par
+     l'admin reste affichée telle quelle (honest data), la langue reste réactive. */
+  const L = localizeProductFields(data, lang);
+  const catName = localizeCategoryName(data.category?.slug, data.category?.name, lang);
+  const price = formatPriceRange(data.priceMinCents, data.priceMaxCents, data.currency, L.priceNote, lang);
   const hasRange = data.priceMinCents != null && data.priceMaxCents != null && data.priceMinCents !== data.priceMaxCents;
   const pop = popularityFor(popularity?.products, data.id);
 
@@ -136,7 +141,7 @@ export function ProductDetailView({
             <ProductImage
               key={current?.url || "empty"}
               src={current?.url ?? null}
-              alt={current?.altText || t("catalog.imageAlt", { title: data.title })}
+              alt={current?.altText ? (current.altText === data.title ? L.title : current.altText) : t("catalog.imageAlt", { title: L.title })}
               className="aspect-[4/3] w-full object-cover"
               iconClassName="h-14 w-14"
             />
@@ -155,7 +160,7 @@ export function ProductDetailView({
                 >
                   <ProductImage
                     src={m.url}
-                    alt={m.altText || t("product.thumbAlt", { index: i + 1, title: data.title })}
+                    alt={m.altText || t("product.thumbAlt", { index: i + 1, title: L.title })}
                     className="h-full w-full object-cover"
                     iconClassName="h-5 w-5"
                   />
@@ -169,7 +174,7 @@ export function ProductDetailView({
         <div className="rounded-2xl border bg-white p-5 shadow-sm lg:p-6">
           <p className="flex flex-wrap items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {data.category ? (
-              <span className="inline-flex items-center gap-1.5">{data.category.name}</span>
+              <span className="inline-flex items-center gap-1.5">{catName}</span>
             ) : (
               t(productTypeKey(data.productType))
             )}
@@ -177,9 +182,9 @@ export function ProductDetailView({
             <span className="normal-case">{t(productTypeKey(data.productType))}</span>
           </p>
 
-          <h1 className="mt-2 text-2xl font-bold tracking-tight lg:text-3xl">{data.title}</h1>
-          {data.shortDescription ? (
-            <p className="mt-2 text-sm text-muted-foreground lg:text-base">{data.shortDescription}</p>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight lg:text-3xl">{L.title}</h1>
+          {L.shortDescription ? (
+            <p className="mt-2 text-sm text-muted-foreground lg:text-base">{L.shortDescription}</p>
           ) : null}
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -204,7 +209,7 @@ export function ProductDetailView({
               {price}
             </p>
             {data.priceNote ? (
-              <p className="text-xs text-muted-foreground">{data.priceNote}</p>
+              <p className="text-xs text-muted-foreground">{L.priceNote}</p>
             ) : null}
             {hasRange ? (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -216,13 +221,13 @@ export function ProductDetailView({
           <Separator className="my-4" />
 
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("product.descriptionTitle")}</h2>
-          <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-foreground/85">{data.description}</p>
+          <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-foreground/85">{L.description}</p>
 
-          {data.features.length > 0 ? (
+          {L.features.length > 0 ? (
             <>
               <h2 className="mt-5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("product.featuresTitle")}</h2>
               <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                {data.features.map((f, i) => (
+                {L.features.map((f, i) => (
                   <div key={i} className="rounded-xl border bg-white px-3 py-2">
                     <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{f.label}</dt>
                     <dd className="text-sm font-medium">{f.value}</dd>
@@ -332,7 +337,7 @@ export function ProductDetailView({
       {/* Demande de renseignements (immobilier / véhicules) */}
       {data.allowInquiry ? (
         <section className="mt-8" aria-labelledby="inquiry-title">
-          <InquiryForm productSlug={data.slug} productTitle={data.title} />
+          <InquiryForm productSlug={data.slug} productTitle={L.title} />
         </section>
       ) : null}
     </div>

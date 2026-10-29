@@ -1,0 +1,875 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * Vue Produits — liste filtrable, création/édition complète (produit + médias + fonctionnalités),
+     5→ * gestion des offres par partenaire, actions de publication (RBAC côté serveur en dernier recours).
+     6→ */
+     7→import { useCallback, useEffect, useState } from "react";
+     8→import {
+     9→  apiDelete, apiGet, apiPost, apiPut, formatDate, formatPriceRange,
+    10→} from "@/lib/client";
+    11→import { CURRENCIES } from "@/lib/money";
+    12→import { hasPermission } from "@/lib/rbac";
+    13→import type { AdminUser } from "@/components/admin/admin-app";
+    14→import { Button } from "@/components/ui/button";
+    15→import { Card, CardContent } from "@/components/ui/card";
+    16→import { Badge } from "@/components/ui/badge";
+    17→import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+    18→import { Input } from "@/components/ui/input";
+    19→import { Label } from "@/components/ui/label";
+    20→import { Textarea } from "@/components/ui/textarea";
+    21→import { Switch } from "@/components/ui/switch";
+    22→import { Skeleton } from "@/components/ui/skeleton";
+    23→import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+    24→import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+    25→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+    26→import { Separator } from "@/components/ui/separator";
+    27→import { toast } from "sonner";
+    28→import {
+    29→  Archive, Check, ImageOff, Link2, Loader2, Package, Pencil, Plus, Search, Trash2, TriangleAlert, X,
+    30→} from "lucide-react";
+    31→
+    32→/* ───────────────────────── Types & libellés ───────────────────────── */
+    33→
+    34→interface OfferRow {
+    35→  id: string;
+    36→  partnerName: string;
+    37→  destinationUrl: string;
+    38→  priceCents: number | null;
+    39→  currency: string;
+    40→  availability: string;
+    41→  isActive: boolean;
+    42→  urlCheckStatus: string | null;
+    43→  lastSyncedAt: string | null;
+    44→  externalId: string | null;
+    45→}
+    46→
+    47→interface ProductRow {
+    48→  id: string; title: string; slug: string; status: string; productType: string; isDemo: boolean;
+    49→  category: { id: string; name: string } | null;
+    50→  image: string | null;
+    51→  priceMinCents: number | null; priceMaxCents: number | null; currency: string;
+    52→  priceNote: string | null; allowInquiry: boolean;
+    53→  offers: OfferRow[]; updatedAt: string;
+    54→}
+    55→
+    56→interface ProductDetail {
+    57→  id: string; title: string; slug: string; shortDescription: string | null; description: string;
+    58→  status: string; productType: string; language: string;
+    59→  countries: string; features: string;
+    60→  categoryId: string | null;
+    61→  priceMinCents: number | null; priceMaxCents: number | null;
+    62→  currency: string; priceNote: string | null; allowInquiry: boolean; isDemo: boolean;
+    63→  media: { id: string; url: string; altText: string | null }[];
+    64→  offers: (OfferRow & { partner: { id: string; name: string } })[];
+    65→  category: { id: string; name: string } | null;
+    66→}
+    67→
+    68→interface CategoryItem { id: string; name: string; slug: string; isActive: boolean }
+    69→interface PartnerItem { id: string; name: string; isDemo: boolean }
+    70→
+    71→const PRODUCT_STATUSES: Record<string, { label: string; cls: string }> = {
+    72→  draft: { label: "Brouillon", cls: "border-zinc-200 bg-zinc-100 text-zinc-600" },
+    73→  pending_review: { label: "En revue", cls: "border-amber-200 bg-amber-50 text-amber-700" },
+    74→  published: { label: "Publié", cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+    75→  suspended: { label: "Suspendu", cls: "border-red-200 bg-red-50 text-red-700" },
+    76→  archived: { label: "Archivé", cls: "border-zinc-200 bg-zinc-50 text-zinc-400" },
+    77→};
+    78→
+    79→const PRODUCT_TYPES: Record<string, string> = {
+    80→  digital: "Produit numérique", training: "Formation", subscription: "Abonnement",
+    81→  home: "Maison & déco", electronics: "Électronique", real_estate: "Immobilier",
+    82→  vehicle: "Véhicule", other: "Autre",
+    83→};
+    84→
+    85→const LANGUAGES: Record<string, string> = { fr: "Français", en: "English", es: "Español", de: "Deutsch", it: "Italiano", ar: "العربية" };
+    86→const AVAILABILITY: Record<string, string> = { in_stock: "En stock", out_of_stock: "Rupture", unknown: "Inconnu" };
+    87→
+    88→function slugify(s: string): string {
+    89→  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    90→    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+    91→}
+    92→
+    93→function eurosToCents(raw: string): number | null {
+    94→  const t = raw.trim().replace(",", ".");
+    95→  if (!t) return null;
+    96→  const v = Number.parseFloat(t);
+    97→  if (Number.isNaN(v) || v < 0) return null;
+    98→  return Math.round(v * 100);
+    99→}
+   100→
+   101→function parseJsonArrayField(raw: string | null | undefined): string[] {
+   102→  if (!raw) return [];
+   103→  try { const v = JSON.parse(raw); return Array.isArray(v) ? v.map(String) : []; } catch { return []; }
+   104→}
+   105→
+   106→function StatusBadge({ status }: { status: string }) {
+   107→  const s = PRODUCT_STATUSES[status] ?? { label: status, cls: "border-zinc-200 bg-zinc-100 text-zinc-600" };
+   108→  return <Badge variant="outline" className={`shrink-0 ${s.cls}`}>{s.label}</Badge>;
+   109→}
+   110→
+   111→function UrlCheckBadge({ status }: { status: string | null }) {
+   112→  if (status === "ok") return <Badge variant="outline" className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-700">URL vérifiée</Badge>;
+   113→  if (status === "broken") return <Badge variant="outline" className="shrink-0 border-red-200 bg-red-50 text-red-700">Lien cassé</Badge>;
+   114→  return <Badge variant="outline" className="shrink-0 border-zinc-200 bg-zinc-100 text-zinc-600">Non vérifié</Badge>;
+   115→}
+   116→
+   117→interface ProductForm {
+   118→  title: string; slug: string; slugTouched: boolean; description: string; shortDescription: string;
+   119→  status: string; productType: string; language: string; countriesText: string;
+   120→  categoryId: string; priceMin: string; priceMax: string; currency: string;
+   121→  priceNote: string; allowInquiry: boolean;
+   122→  features: { label: string; value: string }[];
+   123→  media: { url: string; altText: string }[];
+   124→}
+   125→
+   126→const EMPTY_FORM: ProductForm = {
+   127→  title: "", slug: "", slugTouched: false, description: "", shortDescription: "",
+   128→  status: "draft", productType: "digital", language: "fr", countriesText: "",
+   129→  categoryId: "", priceMin: "", priceMax: "", currency: "EUR", priceNote: "",
+   130→  allowInquiry: false, features: [], media: [],
+   131→};
+   132→
+   133→interface OfferDraft {
+   134→  id: string; partnerId: string; partnerName: string; destinationUrl: string; price: string;
+   135→  currency: string; availability: string; urlCheckStatus: string | null; isActive: boolean;
+   136→  externalId: string | null; lastSyncedAt: string | null;
+   137→}
+   138→
+   139→/* ───────────────────────── Vue ───────────────────────── */
+   140→
+   141→export function ProductsView({ user }: { user: AdminUser }) {
+   142→  const canWrite = hasPermission(user.role, "catalog.write");
+   143→
+   144→  const [items, setItems] = useState<ProductRow[] | null>(null);
+   145→  const [total, setTotal] = useState(0);
+   146→  const [page, setPage] = useState(1);
+   147→  const [loading, setLoading] = useState(true);
+   148→  const [qInput, setQInput] = useState("");
+   149→  const [q, setQ] = useState("");
+   150→  const [status, setStatus] = useState("all");
+   151→  const [categoryId, setCategoryId] = useState("all");
+   152→  const [categories, setCategories] = useState<CategoryItem[]>([]);
+   153→  const [partners, setPartners] = useState<PartnerItem[]>([]);
+   154→
+   155→  // Dialog produit
+   156→  const [dialogOpen, setDialogOpen] = useState(false);
+   157→  const [editingId, setEditingId] = useState<string | null>(null);
+   158→  const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
+   159→  const [saving, setSaving] = useState(false);
+   160→  const [detailLoading, setDetailLoading] = useState(false);
+   161→
+   162→  // Offres (mode édition)
+   163→  const [offers, setOffers] = useState<OfferDraft[]>([]);
+   164→  const [newOffer, setNewOffer] = useState({ partnerId: "", destinationUrl: "", price: "", availability: "unknown", externalId: "" });
+   165→  const [initialOffer, setInitialOffer] = useState({ partnerId: "", destinationUrl: "", price: "", availability: "unknown", externalId: "" });
+   166→  const [offersBusy, setOffersBusy] = useState(false);
+   167→
+   168→  // Suppression
+   169→  const [deleteTarget, setDeleteTarget] = useState<ProductRow | null>(null);
+   170→  const [deleting, setDeleting] = useState(false);
+   171→  const [offerDeleteTarget, setOfferDeleteTarget] = useState<OfferDraft | null>(null);
+   172→
+   173→  const perPage = 20;
+   174→
+   175→  const load = useCallback(async (p: number) => {
+   176→    setLoading(true);
+   177→    try {
+   178→      const params = new URLSearchParams({ page: String(p), perPage: String(perPage) });
+   179→      if (q.trim()) params.set("q", q.trim());
+   180→      if (status !== "all") params.set("status", status);
+   181→      if (categoryId !== "all") params.set("categoryId", categoryId);
+   182→      const data = await apiGet<{ items: ProductRow[]; total: number }>(`/api/admin/products?${params.toString()}`);
+   183→      setItems(data.items);
+   184→      setTotal(data.total);
+   185→    } catch (e) {
+   186→      setItems([]);
+   187→      toast.error(e instanceof Error ? e.message : "Erreur de chargement des produits");
+   188→    } finally {
+   189→      setLoading(false);
+   190→    }
+   191→  }, [q, status, categoryId]);
+   192→
+   193→  // Chargement à chaque changement de page ou de filtres appliqués
+   194→  useEffect(() => { void load(page); }, [load, page]);
+   195→
+   196→  const applyFilters = () => { setQ(qInput); setPage(1); };
+   197→
+   198→  useEffect(() => {
+   199→    apiGet<{ items: CategoryItem[] }>("/api/admin/categories")
+   200→      .then((d) => setCategories(d.items))
+   201→      .catch(() => setCategories([]));
+   202→    apiGet<{ items: PartnerItem[] }>("/api/admin/partners")
+   203→      .then((d) => setPartners(d.items))
+   204→      .catch(() => setPartners([])); // analyste : pas de partners.read → ajout d'offre désactivé
+   205→  }, []);
+   206→
+   207→  const openCreate = () => {
+   208→    setEditingId(null);
+   209→    setForm(EMPTY_FORM);
+   210→    setInitialOffer({ partnerId: "", destinationUrl: "", price: "", availability: "unknown", externalId: "" });
+   211→    setDialogOpen(true);
+   212→  };
+   213→
+   214→  const openEdit = async (id: string) => {
+   215→    setDialogOpen(true);
+   216→    setDetailLoading(true);
+   217→    try {
+   218→      const d = await apiGet<{ product: ProductDetail }>(`/api/admin/products/${id}`);
+   219→      const p = d.product;
+   220→      setEditingId(p.id);
+   221→      setForm({
+   222→        title: p.title, slug: p.slug, slugTouched: true, description: p.description,
+   223→        shortDescription: p.shortDescription ?? "",
+   224→        status: p.status, productType: p.productType, language: p.language,
+   225→        countriesText: parseJsonArrayField(p.countries).join(", "),
+   226→        categoryId: p.categoryId ?? "", priceMin: p.priceMinCents != null ? String(p.priceMinCents / 100) : "",
+   227→        priceMax: p.priceMaxCents != null ? String(p.priceMaxCents / 100) : "",
+   228→        currency: p.currency || "EUR", priceNote: p.priceNote ?? "", allowInquiry: p.allowInquiry,
+   229→        features: (() => { try { const f = JSON.parse(p.features); return Array.isArray(f) ? f.map((x: { label?: string; value?: string }) => ({ label: String(x.label ?? ""), value: String(x.value ?? "") })) : []; } catch { return []; } })(),
+   230→        media: p.media.map((m) => ({ url: m.url, altText: m.altText ?? "" })),
+   231→      });
+   232→      setOffers(p.offers.map((o) => ({
+   233→        id: o.id, partnerId: o.partner.id, partnerName: o.partner.name, destinationUrl: o.destinationUrl,
+   234→        price: o.priceCents != null ? String(o.priceCents / 100) : "", currency: o.currency,
+   235→        availability: o.availability, urlCheckStatus: o.urlCheckStatus, isActive: o.isActive, externalId: o.externalId,
+   236→        lastSyncedAt: o.lastSyncedAt,
+   237→      })));
+   238→    } catch (e) {
+   239→      toast.error(e instanceof Error ? e.message : "Produit introuvable");
+   240→      setDialogOpen(false);
+   241→    } finally {
+   242→      setDetailLoading(false);
+   243→    }
+   244→  };
+   245→
+   246→  // Vérification serveur réelle de l'URL d'une offre (POST /api/admin/offers/check, Sprint A)
+   247→  const testOfferUrl = async (o: OfferDraft) => {
+   248→    setOffersBusy(true);
+   249→    try {
+   250→      const data = await apiPost<{ check: { status: string; httpStatus: number | null; reason: string | null; finalUrl: string | null } }>(
+   251→        "/api/admin/offers/check",
+   252→        { offerId: o.id }
+   253→      );
+   254→      const c = data.check;
+   255→      setOffers((arr) => arr.map((x) => (x.id === o.id ? { ...x, urlCheckStatus: c.status } : x)));
+   256→      if (c.status === "ok") {
+   257→        toast.success(`URL joignable${c.httpStatus ? ` — HTTP ${c.httpStatus}` : ""}. Statut mis à jour.`);
+   258→      } else {
+   259→        toast.error(`Lien cassé : ${c.reason || "injoignable"}. À corriger avant mise en avant.`);
+   260→      }
+   261→    } catch (e) {
+   262→      toast.error(e instanceof Error ? e.message : "Échec du test d'URL");
+   263→    } finally {
+   264→      setOffersBusy(false);
+   265→    }
+   266→  };
+   267→
+   268→  const buildBody = () => ({
+   269→    title: form.title.trim(),
+   270→    slug: form.slug.trim() || slugify(form.title),
+   271→    description: form.description.trim(),
+   272→    shortDescription: form.shortDescription.trim() || null,
+   273→    status: form.status,
+   274→    productType: form.productType,
+   275→    language: form.language,
+   276→    countries: form.countriesText.split(",").map((c) => c.trim().toUpperCase()).filter((c) => c.length === 2),
+   277→    features: form.features.filter((f) => f.label.trim() || f.value.trim()),
+   278→    categoryId: form.categoryId || null,
+   279→    priceMinCents: eurosToCents(form.priceMin),
+   280→    priceMaxCents: eurosToCents(form.priceMax),
+   281→    currency: form.currency,
+   282→    priceNote: form.priceNote.trim() || null,
+   283→    allowInquiry: form.allowInquiry,
+   284→    media: form.media.filter((m) => m.url.trim()).map((m) => ({ url: m.url.trim(), altText: m.altText.trim() || undefined })),
+   285→  });
+   286→
+   287→  const submitProduct = async () => {
+   288→    if (form.title.trim().length < 3) { toast.error("Le titre doit faire au moins 3 caractères."); return; }
+   289→    if (form.description.trim().length < 20) { toast.error("La description doit faire au moins 20 caractères."); return; }
+   290→    setSaving(true);
+   291→    try {
+   292→      if (editingId) {
+   293→        await apiPut(`/api/admin/products/${editingId}`, buildBody());
+   294→        toast.success("Produit mis à jour.");
+   295→      } else {
+   296→        const body: Record<string, unknown> = { ...buildBody() };
+   297→        if (initialOffer.partnerId && initialOffer.destinationUrl.trim()) {
+   298→          body.offer = {
+   299→            partnerId: initialOffer.partnerId,
+   300→            destinationUrl: initialOffer.destinationUrl.trim(),
+   301→            priceCents: eurosToCents(initialOffer.price),
+   302→            currency: form.currency,
+   303→            availability: initialOffer.availability,
+   304→            externalId: initialOffer.externalId.trim() || undefined,
+   305→          };
+   306→        }
+   307→        await apiPost("/api/admin/products", body);
+   308→        toast.success("Produit créé (brouillon par défaut).");
+   309→      }
+   310→      setDialogOpen(false);
+   311→      load(page);
+   312→    } catch (e) {
+   313→      toast.error(e instanceof Error ? e.message : "Enregistrement impossible");
+   314→    } finally {
+   315→      setSaving(false);
+   316→    }
+   317→  };
+   318→
+   319→  const setStatusOf = async (row: ProductRow, next: string) => {
+   320→    try {
+   321→      await apiPut(`/api/admin/products/${row.id}`, { status: next });
+   322→      toast.success(`Statut mis à jour : ${PRODUCT_STATUSES[next]?.label ?? next}.`);
+   323→      load(page);
+   324→    } catch (e) {
+   325→      toast.error(e instanceof Error ? e.message : "Mise à jour impossible");
+   326→    }
+   327→  };
+   328→
+   329→  const confirmDelete = async () => {
+   330→    if (!deleteTarget) return;
+   331→    setDeleting(true);
+   332→    try {
+   333→      const res = await apiDelete<{ archived?: boolean; deleted?: boolean; message?: string }>(`/api/admin/products/${deleteTarget.id}`);
+   334→      if (res.archived) toast.info(res.message ?? "Produit archivé (historique de clics conservé).");
+   335→      else toast.success("Produit supprimé.");
+   336→      setDeleteTarget(null);
+   337→      load(page);
+   338→    } catch (e) {
+   339→      toast.error(e instanceof Error ? e.message : "Suppression impossible");
+   340→    } finally {
+   341→      setDeleting(false);
+   342→    }
+   343→  };
+   344→
+   345→  const reloadOffers = async (productId: string) => {
+   346→    const d = await apiGet<{ product: ProductDetail }>(`/api/admin/products/${productId}`);
+   347→    setOffers(d.product.offers.map((o) => ({
+   348→      id: o.id, partnerId: o.partner.id, partnerName: o.partner.name, destinationUrl: o.destinationUrl,
+   349→      price: o.priceCents != null ? String(o.priceCents / 100) : "", currency: o.currency,
+   350→      availability: o.availability, urlCheckStatus: o.urlCheckStatus, isActive: o.isActive, externalId: o.externalId,
+   351→      lastSyncedAt: o.lastSyncedAt,
+   352→    })));
+   353→    load(page);
+   354→  };
+   355→
+   356→  const addOffer = async () => {
+   357→    if (!editingId) return;
+   358→    if (!newOffer.partnerId) { toast.error("Sélectionnez un partenaire."); return; }
+   359→    if (!newOffer.destinationUrl.trim()) { toast.error("L'URL de destination est requise."); return; }
+   360→    setOffersBusy(true);
+   361→    try {
+   362→      await apiPost("/api/admin/offers", {
+   363→        productId: editingId, partnerId: newOffer.partnerId,
+   364→        destinationUrl: newOffer.destinationUrl.trim(),
+   365→        priceCents: eurosToCents(newOffer.price), currency: form.currency,
+   366→        availability: newOffer.availability,
+   367→        externalId: newOffer.externalId.trim() || undefined,
+   368→      });
+   369→      toast.success("Offre ajoutée (URL non vérifiée).");
+   370→      setNewOffer({ partnerId: "", destinationUrl: "", price: "", availability: "unknown", externalId: "" });
+   371→      await reloadOffers(editingId);
+   372→    } catch (e) {
+   373→      toast.error(e instanceof Error ? e.message : "Ajout impossible");
+   374→    } finally {
+   375→      setOffersBusy(false);
+   376→    }
+   377→  };
+   378→
+   379→  const saveOffer = async (o: OfferDraft) => {
+   380→    setOffersBusy(true);
+   381→    try {
+   382→      await apiPut("/api/admin/offers", {
+   383→        id: o.id, destinationUrl: o.destinationUrl.trim(),
+   384→        priceCents: eurosToCents(o.price), availability: o.availability,
+   385→      });
+   386→      toast.success("Offre mise à jour — statut de vérification remis à « non vérifié ».");
+   387→      if (editingId) await reloadOffers(editingId);
+   388→    } catch (e) {
+   389→      toast.error(e instanceof Error ? e.message : "Mise à jour impossible");
+   390→    } finally {
+   391→      setOffersBusy(false);
+   392→    }
+   393→  };
+   394→
+   395→  const confirmDeleteOffer = async () => {
+   396→    if (!offerDeleteTarget) return;
+   397→    setOffersBusy(true);
+   398→    try {
+   399→      const res = await apiDelete<{ deactivated?: boolean; deleted?: boolean; message?: string }>(`/api/admin/offers?id=${offerDeleteTarget.id}`);
+   400→      if (res.deactivated) toast.info(res.message ?? "Offre désactivée.");
+   401→      else toast.success("Offre supprimée.");
+   402→      setOfferDeleteTarget(null);
+   403→      if (editingId) await reloadOffers(editingId);
+   404→    } catch (e) {
+   405→      toast.error(e instanceof Error ? e.message : "Suppression impossible");
+   406→    } finally {
+   407→      setOffersBusy(false);
+   408→    }
+   409→  };
+   410→
+   411→  const totalPages = Math.max(1, Math.ceil(total / perPage));
+   412→
+   413→  return (
+   414→    <div className="space-y-4">
+   415→      {/* Barre de filtres */}
+   416→      <Card>
+   417→        <CardContent className="flex flex-wrap items-end gap-3 p-4">
+   418→          <div className="space-y-1.5 min-w-56 flex-1 max-w-sm">
+   419→            <Label htmlFor="prod-q">Recherche</Label>
+   420→            <div className="relative">
+   421→              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+   422→              <Input id="prod-q" placeholder="Titre ou slug…" value={qInput} onChange={(e) => setQInput(e.target.value)}
+   423→                onKeyDown={(e) => { if (e.key === "Enter") applyFilters(); }} className="pl-8" />
+   424→            </div>
+   425→          </div>
+   426→          <div className="space-y-1.5">
+   427→            <Label htmlFor="prod-status">Statut</Label>
+   428→            <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
+   429→              <SelectTrigger id="prod-status" className="w-44"><SelectValue /></SelectTrigger>
+   430→              <SelectContent>
+   431→                <SelectItem value="all">Tous les statuts</SelectItem>
+   432→                {Object.entries(PRODUCT_STATUSES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+   433→              </SelectContent>
+   434→            </Select>
+   435→          </div>
+   436→          <div className="space-y-1.5">
+   437→            <Label htmlFor="prod-cat">Catégorie</Label>
+   438→            <Select value={categoryId} onValueChange={(v) => { setCategoryId(v); setPage(1); }}>
+   439→              <SelectTrigger id="prod-cat" className="w-52"><SelectValue /></SelectTrigger>
+   440→              <SelectContent>
+   441→                <SelectItem value="all">Toutes les catégories</SelectItem>
+   442→                {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+   443→              </SelectContent>
+   444→            </Select>
+   445→          </div>
+   446→          <Button onClick={applyFilters} disabled={loading}>Filtrer</Button>
+   447→          {canWrite && (
+   448→            <Button onClick={openCreate} className="ml-auto">
+   449→              <Plus className="h-4 w-4" /> Nouveau produit
+   450→            </Button>
+   451→          )}
+   452→        </CardContent>
+   453→      </Card>
+   454→
+   455→      {/* Table */}
+   456→      <Card>
+   457→        <CardContent className="p-0">
+   458→          <div className="max-h-96 overflow-auto thin-scrollbar">
+   459→            <table className="w-full text-sm">
+   460→              <thead className="sticky top-0 z-10 bg-zinc-50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+   461→                <tr>
+   462→                  <th className="px-4 py-2.5 font-medium">Produit</th>
+   463→                  <th className="px-3 py-2.5 font-medium">Statut</th>
+   464→                  <th className="px-3 py-2.5 font-medium">Catégorie</th>
+   465→                  <th className="px-3 py-2.5 font-medium">Prix</th>
+   466→                  <th className="px-3 py-2.5 font-medium">Offres</th>
+   467→                  <th className="px-3 py-2.5 font-medium">Partenaire(s)</th>
+   468→                  <th className="px-3 py-2.5 font-medium">Maj</th>
+   469→                  {canWrite && <th className="px-3 py-2.5 font-medium text-right">Actions</th>}
+   470→                </tr>
+   471→              </thead>
+   472→              <tbody className="divide-y">
+   473→                {loading && !items ? (
+   474→                  Array.from({ length: 5 }).map((_, i) => (
+   475→                    <tr key={i}><td colSpan={canWrite ? 8 : 7} className="px-4 py-3"><Skeleton className="h-8 w-full" /></td></tr>
+   476→                  ))
+   477→                ) : items && items.length > 0 ? (
+   478→                  items.map((p) => (
+   479→                    <tr key={p.id} className="hover:bg-zinc-50/70">
+   480→                      <td className="px-4 py-2.5">
+   481→                        <div className="flex items-center gap-3">
+   482→                          {p.image ? (
+   483→                            <img src={p.image} alt="" loading="lazy" className="h-10 w-10 shrink-0 rounded-md border object-cover" />
+   484→                          ) : (
+   485→                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-zinc-50 text-muted-foreground">
+   486→                              <ImageOff className="h-4 w-4" />
+   487→                            </span>
+   488→                          )}
+   489→                          <span className="min-w-0">
+   490→                            <span className="flex items-center gap-1.5">
+   491→                              <span className="block max-w-56 truncate font-medium" title={p.title}>{p.title}</span>
+   492→                              {p.isDemo && <Badge variant="outline" className="shrink-0 border-amber-300 bg-amber-50 text-amber-700">Démo</Badge>}
+   493→                            </span>
+   494→                            <span className="block max-w-56 truncate text-xs text-muted-foreground" title={p.slug}>/{p.slug}</span>
+   495→                          </span>
+   496→                        </div>
+   497→                      </td>
+   498→                      <td className="px-3 py-2.5"><StatusBadge status={p.status} /></td>
+   499→                      <td className="px-3 py-2.5 text-muted-foreground">{p.category?.name ?? "—"}</td>
+   500→                      <td className="px-3 py-2.5 whitespace-nowrap">
+   501→                        {p.priceMinCents == null && p.priceMaxCents == null
+   502→                          ? "—"
+   503→                          : formatPriceRange(p.priceMinCents, p.priceMaxCents, p.currency, p.priceNote)}
+   504→                      </td>
+   505→                      <td className="px-3 py-2.5 tabular-nums">{p.offers.length}</td>
+   506→                      <td className="px-3 py-2.5">
+   507→                        <span className="block max-w-40 truncate text-muted-foreground" title={p.offers.map((o) => o.partnerName).join(", ")}>
+   508→                          {p.offers.length ? Array.from(new Set(p.offers.map((o) => o.partnerName))).join(", ") : "—"}
+   509→                        </span>
+   510→                      </td>
+   511→                      <td className="px-3 py-2.5 whitespace-nowrap text-xs text-muted-foreground">{formatDate(p.updatedAt)}</td>
+   512→                      {canWrite && (
+   513→                        <td className="px-3 py-2.5">
+   514→                          <div className="flex items-center justify-end gap-1">
+   515→                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p.id)} aria-label={`Modifier ${p.title}`}>
+   516→                              <Pencil className="h-4 w-4" />
+   517→                            </Button>
+   518→                            {p.status === "published" ? (
+   519→                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setStatusOf(p, "suspended")} aria-label={`Suspendre ${p.title}`} title="Suspendre">
+   520→                                <X className="h-4 w-4 text-red-600" />
+   521→                              </Button>
+   522→                            ) : p.status !== "archived" ? (
+   523→                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setStatusOf(p, "published")} aria-label={`Publier ${p.title}`} title="Publier">
+   524→                                <Check className="h-4 w-4 text-emerald-600" />
+   525→                              </Button>
+   526→                            ) : null}
+   527→                            {p.status !== "archived" && (
+   528→                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setStatusOf(p, "archived")} aria-label={`Archiver ${p.title}`} title="Archiver">
+   529→                                <Archive className="h-4 w-4" />
+   530→                              </Button>
+   531→                            )}
+   532→                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDeleteTarget(p)} aria-label={`Supprimer ${p.title}`} title="Supprimer">
+   533→                              <Trash2 className="h-4 w-4 text-red-600" />
+   534→                            </Button>
+   535→                          </div>
+   536→                        </td>
+   537→                      )}
+   538→                    </tr>
+   539→                  ))
+   540→                ) : (
+   541→                  <tr>
+   542→                    <td colSpan={canWrite ? 8 : 7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+   543→                      <Package className="mx-auto mb-2 h-8 w-8 opacity-40" />
+   544→                      Aucun produit{canWrite ? " — créez-en un" : ""}.
+   545→                    </td>
+   546→                  </tr>
+   547→                )}
+   548→              </tbody>
+   549→            </table>
+   550→          </div>
+   551→        </CardContent>
+   552→      </Card>
+   553→
+   554→      {total > perPage && (
+   555→        <div className="flex items-center justify-end gap-3 text-sm text-muted-foreground">
+   556→          <span>Page {page} / {totalPages} — {total} produit(s)</span>
+   557→          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((v) => v - 1)}>Précédent</Button>
+   558→          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((v) => v + 1)}>Suivant</Button>
+   559→        </div>
+   560→      )}
+   561→
+   562→      {/* Dialog création / édition */}
+   563→      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) setDialogOpen(false); }}>
+   564→        <DialogContent className="max-h-[88vh] overflow-y-auto thin-scrollbar max-w-3xl">
+   565→          <DialogHeader>
+   566→            <DialogTitle>{editingId ? "Modifier le produit" : "Nouveau produit"}</DialogTitle>
+   567→            <DialogDescription>
+   568→              Les données sont enregistrées côté serveur (catalog.write). Slug auto-dérivé du titre si vide.
+   569→            </DialogDescription>
+   570→          </DialogHeader>
+   571→          {detailLoading ? (
+   572→            <div className="space-y-3 py-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
+   573→          ) : (
+   574→            <div className="space-y-4">
+   575→              <div className="grid gap-3 sm:grid-cols-2">
+   576→                <div className="space-y-1.5">
+   577→                  <Label htmlFor="f-title">Titre *</Label>
+   578→                  <Input id="f-title" value={form.title} onChange={(e) => setForm((f) => ({
+   579→                    ...f, title: e.target.value, slug: f.slugTouched ? f.slug : slugify(e.target.value),
+   580→                  }))} />
+   581→                </div>
+   582→                <div className="space-y-1.5">
+   583→                  <Label htmlFor="f-slug">Slug</Label>
+   584→                  <Input id="f-slug" value={form.slug} onChange={(e) => setForm((f) => ({ ...f, slug: slugify(e.target.value), slugTouched: true }))} placeholder="auto" />
+   585→                </div>
+   586→              </div>
+   587→              <div className="space-y-1.5">
+   588→                <Label htmlFor="f-desc">Description * (20 caractères minimum)</Label>
+   589→                <Textarea id="f-desc" rows={4} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+   590→              </div>
+   591→              <div className="space-y-1.5">
+   592→                <Label htmlFor="f-short">Résumé (accroche boutique)</Label>
+   593→                <Textarea id="f-short" rows={2} value={form.shortDescription} onChange={(e) => setForm((f) => ({ ...f, shortDescription: e.target.value }))} />
+   594→              </div>
+   595→              <div className="grid gap-3 sm:grid-cols-3">
+   596→                <div className="space-y-1.5">
+   597→                  <Label>Statut</Label>
+   598→                  <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+   599→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   600→                    <SelectContent>
+   601→                      {Object.entries(PRODUCT_STATUSES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+   602→                    </SelectContent>
+   603→                  </Select>
+   604→                </div>
+   605→                <div className="space-y-1.5">
+   606→                  <Label>Type</Label>
+   607→                  <Select value={form.productType} onValueChange={(v) => setForm((f) => ({ ...f, productType: v }))}>
+   608→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   609→                    <SelectContent>
+   610→                      {Object.entries(PRODUCT_TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+   611→                    </SelectContent>
+   612→                  </Select>
+   613→                </div>
+   614→                <div className="space-y-1.5">
+   615→                  <Label>Langue</Label>
+   616→                  <Select value={form.language} onValueChange={(v) => setForm((f) => ({ ...f, language: v }))}>
+   617→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   618→                    <SelectContent>
+   619→                      {Object.entries(LANGUAGES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+   620→                    </SelectContent>
+   621→                  </Select>
+   622→                </div>
+   623→              </div>
+   624→              <div className="grid gap-3 sm:grid-cols-3">
+   625→                <div className="space-y-1.5">
+   626→                  <Label>Catégorie</Label>
+   627→                  <Select value={form.categoryId || "none"} onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v === "none" ? "" : v }))}>
+   628→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   629→                    <SelectContent>
+   630→                      <SelectItem value="none">— Aucune —</SelectItem>
+   631→                      {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+   632→                    </SelectContent>
+   633→                  </Select>
+   634→                </div>
+   635→                <div className="space-y-1.5">
+   636→                  <Label>Pays (codes, séparés par des virgules)</Label>
+   637→                  <Input placeholder="FR, BE, MA" value={form.countriesText} onChange={(e) => setForm((f) => ({ ...f, countriesText: e.target.value }))} />
+   638→                </div>
+   639→                <div className="space-y-1.5">
+   640→                  <Label>Devise</Label>
+   641→                  <Select value={form.currency} onValueChange={(v) => setForm((f) => ({ ...f, currency: v }))}>
+   642→                    <SelectTrigger><SelectValue /></SelectTrigger>
+   643→                    <SelectContent>{CURRENCIES.map((c) => <SelectItem key={c.code} value={c.code}>{c.label}</SelectItem>)}</SelectContent>
+   644→                  </Select>
+   645→                </div>
+   646→              </div>
+   647→              <div className="grid gap-3 sm:grid-cols-3">
+   648→                <div className="space-y-1.5">
+   649→                  <Label htmlFor="f-pmin">Prix min ({form.currency})</Label>
+   650→                  <Input id="f-pmin" inputMode="decimal" placeholder="ex. 29.90" value={form.priceMin} onChange={(e) => setForm((f) => ({ ...f, priceMin: e.target.value }))} />
+   651→                </div>
+   652→                <div className="space-y-1.5">
+   653→                  <Label htmlFor="f-pmax">Prix max ({form.currency})</Label>
+   654→                  <Input id="f-pmax" inputMode="decimal" placeholder="ex. 199" value={form.priceMax} onChange={(e) => setForm((f) => ({ ...f, priceMax: e.target.value }))} />
+   655→                </div>
+   656→                <div className="space-y-1.5">
+   657→                  <Label htmlFor="f-pnote">Note de prix</Label>
+   658→                  <Input id="f-pnote" placeholder="ex. par mois" maxLength={80} value={form.priceNote} onChange={(e) => setForm((f) => ({ ...f, priceNote: e.target.value }))} />
+   659→                </div>
+   660→              </div>
+   661→              <p className="text-xs text-muted-foreground">Les prix sont saisis en unités et convertis en centimes (× 100) avant envoi.</p>
+   662→              <label className="flex items-center gap-2 text-sm">
+   663→                <Switch checked={form.allowInquiry} onCheckedChange={(v) => setForm((f) => ({ ...f, allowInquiry: v === true }))} />
+   664→                Autoriser les demandes de devis (immobilier, véhicules…)
+   665→              </label>
+   666→
+   667→              <Separator />
+   668→
+   669→              {/* Fonctionnalités */}
+   670→              <div className="space-y-2">
+   671→                <div className="flex items-center justify-between">
+   672→                  <Label>Fonctionnalités (label + valeur)</Label>
+   673→                  <Button type="button" variant="outline" size="sm"
+   674→                    onClick={() => setForm((f) => ({ ...f, features: [...f.features, { label: "", value: "" }] }))}>
+   675→                    <Plus className="h-3.5 w-3.5" /> Ajouter une ligne
+   676→                  </Button>
+   677→                </div>
+   678→                {form.features.length === 0 && <p className="text-xs text-muted-foreground">Aucune fonctionnalité renseignée.</p>}
+   679→                {form.features.map((ft, i) => (
+   680→                  <div key={i} className="flex items-center gap-2">
+   681→                    <Input placeholder="Label (ex. Garantie)" value={ft.label}
+   682→                      onChange={(e) => setForm((f) => ({ ...f, features: f.features.map((x, j) => j === i ? { ...x, label: e.target.value } : x) }))} />
+   683→                    <Input placeholder="Valeur (ex. 2 ans)" value={ft.value}
+   684→                      onChange={(e) => setForm((f) => ({ ...f, features: f.features.map((x, j) => j === i ? { ...x, value: e.target.value } : x) }))} />
+   685→                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0"
+   686→                      onClick={() => setForm((f) => ({ ...f, features: f.features.filter((_, j) => j !== i) }))} aria-label="Retirer la ligne">
+   687→                      <Trash2 className="h-4 w-4 text-red-600" />
+   688→                    </Button>
+   689→                  </div>
+   690→                ))}
+   691→              </div>
+   692→
+   693→              <Separator />
+   694→
+   695→              {/* Médias */}
+   696→              <div className="space-y-2">
+   697→                <div className="flex items-center justify-between">
+   698→                  <Label>Médias (URL + texte alternatif)</Label>
+   699→                  <Button type="button" variant="outline" size="sm"
+   700→                    onClick={() => setForm((f) => ({ ...f, media: [...f.media, { url: "", altText: "" }] }))}>
+   701→                    <Plus className="h-3.5 w-3.5" /> Ajouter un média
+   702→                  </Button>
+   703→                </div>
+   704→                <p className="text-xs text-muted-foreground">
+   705→                  Astuce : les visuels générés par IA sont servis depuis <code>/demo/…</code> (dossier public/demo).
+   706→                  Suggestion : <code>/demo/velmora-{form.slug || "produit"}.jpg</code>
+   707→                </p>
+   708→                {form.media.length === 0 && <p className="text-xs text-muted-foreground">Aucun média — un visuel générique sera affiché en boutique.</p>}
+   709→                {form.media.map((m, i) => (
+   710→                  <div key={i} className="flex items-center gap-2">
+   711→                    <Input placeholder="URL (ex. /demo/velmora-x.jpg)" value={m.url}
+   712→                      onChange={(e) => setForm((f) => ({ ...f, media: f.media.map((x, j) => j === i ? { ...x, url: e.target.value } : x) }))} />
+   713→                    <Input placeholder="Texte alternatif" value={m.altText}
+   714→                      onChange={(e) => setForm((f) => ({ ...f, media: f.media.map((x, j) => j === i ? { ...x, altText: e.target.value } : x) }))} />
+   715→                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0"
+   716→                      onClick={() => setForm((f) => ({ ...f, media: f.media.filter((_, j) => j !== i) }))} aria-label="Retirer le média">
+   717→                      <Trash2 className="h-4 w-4 text-red-600" />
+   718→                    </Button>
+   719→                  </div>
+   720→                ))}
+   721→              </div>
+   722→
+   723→              <Separator />
+   724→
+   725→              {/* Offres */}
+   726→              {editingId ? (
+   727→                <div className="space-y-3">
+   728→                  <Label>Offres partenaires ({offers.length})</Label>
+   729→                  {offers.length === 0 && (
+   730→                    <p className="text-sm text-muted-foreground">Aucune offre — ajoutez au moins une URL partenaire pour générer des clics.</p>
+   731→                  )}
+   732→                  {offers.map((o, i) => (
+   733→                    <div key={o.id} className="rounded-md border p-3 space-y-2">
+   734→                      <div className="flex flex-wrap items-center gap-2">
+   735→                        <Badge variant="secondary">{o.partnerName}</Badge>
+   736→                        <UrlCheckBadge status={o.urlCheckStatus} />
+   737→                        {!o.isActive && <Badge variant="outline" className="border-zinc-200 bg-zinc-100 text-zinc-500">Désactivée</Badge>}
+   738→                        <div className="ml-auto flex items-center gap-1">
+   739→                          <Button type="button" variant="outline" size="sm" disabled={offersBusy}
+   740→                            onClick={() => void testOfferUrl(o)}
+   741→                            title="Vérifie l'URL côté serveur (liste blanche, HTTP, redirections)">
+   742→                            {offersBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />} Tester
+   743→                          </Button>
+   744→                          <Button type="button" variant="outline" size="sm" disabled={offersBusy} onClick={() => saveOffer(offers[i])}>
+   745→                            {offersBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Enregistrer
+   746→                          </Button>
+   747→                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setOfferDeleteTarget(o)} aria-label="Supprimer l'offre">
+   748→                            <Trash2 className="h-4 w-4 text-red-600" />
+   749→                          </Button>
+   750→                        </div>
+   751→                      </div>
+   752→                      <div className="grid gap-2 sm:grid-cols-4">
+   753→                        <Input className="sm:col-span-2" placeholder="URL de destination (http…)" value={o.destinationUrl}
+   754→                          onChange={(e) => setOffers((arr) => arr.map((x, j) => j === i ? { ...x, destinationUrl: e.target.value } : x))} />
+   755→                        <Input inputMode="decimal" placeholder={`Prix (${form.currency})`} value={o.price}
+   756→                          onChange={(e) => setOffers((arr) => arr.map((x, j) => j === i ? { ...x, price: e.target.value } : x))} />
+   757→                        <Select value={o.availability} onValueChange={(v) => setOffers((arr) => arr.map((x, j) => j === i ? { ...x, availability: v } : x))}>
+   758→                          <SelectTrigger><SelectValue /></SelectTrigger>
+   759→                          <SelectContent>
+   760→                            {Object.entries(AVAILABILITY).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+   761→                          </SelectContent>
+   762→                        </Select>
+   763→                      </div>
+   764→                      {o.lastSyncedAt && <p className="text-[11px] text-muted-foreground">Dernière synchronisation : {formatDate(o.lastSyncedAt)}</p>}
+   765→                    </div>
+   766→                  ))}
+   767→                  <div className="rounded-md border border-dashed p-3 space-y-2">
+   768→                    <p className="text-sm font-medium">Ajouter une offre</p>
+   769→                    <div className="grid gap-2 sm:grid-cols-4">
+   770→                      <Select value={newOffer.partnerId || "none"} onValueChange={(v) => setNewOffer((s) => ({ ...s, partnerId: v === "none" ? "" : v }))}>
+   771→                        <SelectTrigger><SelectValue placeholder="Partenaire" /></SelectTrigger>
+   772→                        <SelectContent>
+   773→                          <SelectItem value="none" disabled>Partenaire…</SelectItem>
+   774→                          {partners.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}{p.isDemo ? " (démo)" : ""}</SelectItem>)}
+   775→                        </SelectContent>
+   776→                      </Select>
+   777→                      <Input className="sm:col-span-2" placeholder="URL de destination" value={newOffer.destinationUrl}
+   778→                        onChange={(e) => setNewOffer((s) => ({ ...s, destinationUrl: e.target.value }))} />
+   779→                      <Input inputMode="decimal" placeholder={`Prix (${form.currency})`} value={newOffer.price}
+   780→                        onChange={(e) => setNewOffer((s) => ({ ...s, price: e.target.value }))} />
+   781→                    </div>
+   782→                    <div className="grid gap-2 sm:grid-cols-3">
+   783→                      <Input placeholder="ID externe (optionnel)" value={newOffer.externalId}
+   784→                        onChange={(e) => setNewOffer((s) => ({ ...s, externalId: e.target.value }))} />
+   785→                      <Select value={newOffer.availability} onValueChange={(v) => setNewOffer((s) => ({ ...s, availability: v }))}>
+   786→                        <SelectTrigger><SelectValue /></SelectTrigger>
+   787→                        <SelectContent>{Object.entries(AVAILABILITY).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+   788→                      </Select>
+   789→                      <Button type="button" variant="secondary" onClick={addOffer} disabled={offersBusy || partners.length === 0}>
+   790→                        <Plus className="h-4 w-4" /> Ajouter
+   791→                      </Button>
+   792→                    </div>
+   793→                    {partners.length === 0 && (
+   794→                      <p className="text-xs text-muted-foreground">Liste des partenaires indisponible pour votre rôle — enregistrez le produit puis ajoutez l&apos;offre depuis un compte autorisé.</p>
+   795→                    )}
+   796→                  </div>
+   797→                </div>
+   798→              ) : (
+   799→                <div className="space-y-2">
+   800→                  <Label>Offre initiale (optionnelle)</Label>
+   801→                  <div className="grid gap-2 sm:grid-cols-4">
+   802→                    <Select value={initialOffer.partnerId || "none"} onValueChange={(v) => setInitialOffer((s) => ({ ...s, partnerId: v === "none" ? "" : v }))}>
+   803→                      <SelectTrigger><SelectValue placeholder="Partenaire" /></SelectTrigger>
+   804→                      <SelectContent>
+   805→                        <SelectItem value="none">— Aucune —</SelectItem>
+   806→                        {partners.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}{p.isDemo ? " (démo)" : ""}</SelectItem>)}
+   807→                      </SelectContent>
+   808→                    </Select>
+   809→                    <Input className="sm:col-span-2" placeholder="URL de destination (http…)" value={initialOffer.destinationUrl}
+   810→                      onChange={(e) => setInitialOffer((s) => ({ ...s, destinationUrl: e.target.value }))} />
+   811→                    <Input inputMode="decimal" placeholder={`Prix (${form.currency})`} value={initialOffer.price}
+   812→                      onChange={(e) => setInitialOffer((s) => ({ ...s, price: e.target.value }))} />
+   813→                  </div>
+   814→                  <p className="text-xs text-muted-foreground">Une fois le produit créé, gérez toutes ses offres dans la fenêtre d&apos;édition.</p>
+   815→                </div>
+   816→              )}
+   817→            </div>
+   818→          )}
+   819→          <DialogFooter>
+   820→            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Annuler</Button>
+   821→            <Button onClick={submitProduct} disabled={saving || detailLoading}>
+   822→              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+   823→              {editingId ? "Enregistrer" : "Créer le produit"}
+   824→            </Button>
+   825→          </DialogFooter>
+   826→        </DialogContent>
+   827→      </Dialog>
+   828→
+   829→      {/* Confirmation suppression produit */}
+   830→      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+   831→        <AlertDialogContent>
+   832→          <AlertDialogHeader>
+   833→            <AlertDialogTitle>Supprimer ce produit ?</AlertDialogTitle>
+   834→            <AlertDialogDescription>
+   835→              « {deleteTarget?.title} » sera définitivement supprimé. S&apos;il a un historique de clics, il sera archivé au lieu d&apos;être supprimé.
+   836→            </AlertDialogDescription>
+   837→          </AlertDialogHeader>
+   838→          <AlertDialogFooter>
+   839→            <AlertDialogCancel disabled={deleting}>Annuler</AlertDialogCancel>
+   840→            <AlertDialogAction onClick={(e) => { e.preventDefault(); confirmDelete(); }} className="bg-red-600 hover:bg-red-700">
+   841→              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <TriangleAlert className="h-4 w-4" />} Supprimer
+   842→            </AlertDialogAction>
+   843→          </AlertDialogFooter>
+   844→        </AlertDialogContent>
+   845→      </AlertDialog>
+   846→
+   847→      {/* Confirmation suppression offre */}
+   848→      <AlertDialog open={!!offerDeleteTarget} onOpenChange={(o) => { if (!o) setOfferDeleteTarget(null); }}>
+   849→        <AlertDialogContent>
+   850→          <AlertDialogHeader>
+   851→            <AlertDialogTitle>Supprimer cette offre ?</AlertDialogTitle>
+   852→            <AlertDialogDescription>
+   853→              Redirection partenaire « {offerDeleteTarget?.partnerName} ». Si des clics y sont rattachés, elle sera simplement désactivée.
+   854→            </AlertDialogDescription>
+   855→          </AlertDialogHeader>
+   856→          <AlertDialogFooter>
+   857→            <AlertDialogCancel disabled={offersBusy}>Annuler</AlertDialogCancel>
+   858→            <AlertDialogAction onClick={(e) => { e.preventDefault(); confirmDeleteOffer(); }} className="bg-red-600 hover:bg-red-700">
+   859→              {offersBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Supprimer
+   860→            </AlertDialogAction>
+   861→          </AlertDialogFooter>
+   862→        </AlertDialogContent>
+   863→      </AlertDialog>
+   864→
+   865→      {!canWrite && (
+   866→        <Alert>
+   867→          <Package className="h-4 w-4" />
+   868→          <AlertTitle>Lecture seule</AlertTitle>
+   869→          <AlertDescription>Votre rôle ne permet pas de modifier le catalogue — les boutons d&apos;écriture sont masqués et le serveur refuserait toute modification.</AlertDescription>
+   870→        </Alert>
+   871→      )}
+   872→    </div>
+   873→  );
+   874→}
+   875→

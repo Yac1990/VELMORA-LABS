@@ -10,6 +10,7 @@ import { apiGet, formatPriceRange } from "@/lib/client";
 import type { CatalogProduct, CatalogResponse, CategoryInfo, CatalogSeed } from "./store-app";
 import { popularityFor, usePopularity, type PopularityProduct } from "./popularity";
 import { useI18n, productTypeKey, availabilityKey } from "./i18n";
+import { localizeProductFields, localizeCategoryName } from "./seed-content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -131,7 +132,11 @@ export function ProductCard({
   popularity?: PopularityProduct | null;
 }) {
   const { t, lang } = useI18n();
-  const price = formatPriceRange(product.priceMinCents, product.priceMaxCents, product.currency, product.priceNote, lang);
+  /* Task 44 : textes du produit localisés (seed → EN) ; contenu personnalisé par
+     l'admin affiché tel quel (honest data). */
+  const L = localizeProductFields(product, lang);
+  const catName = localizeCategoryName(product.category?.slug, product.category?.name, lang);
+  const price = formatPriceRange(product.priceMinCents, product.priceMaxCents, product.currency, L.priceNote, lang);
   const partnerLabel = product.partnerName
     ? product.partnerName
     : product.partnerCount > 1
@@ -142,14 +147,14 @@ export function ProductCard({
       type="button"
       onClick={() => onOpen(product.slug)}
       className="group flex w-full flex-col overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label={t("catalog.cardAria", { title: product.title })}
+      aria-label={t("catalog.cardAria", { title: L.title })}
     >
       {/* suppressHydrationWarning : parent direct de l'<img> produit marquée par
           l'outillage de prévisualisation avant hydratation (Task 36). */}
       <div className="relative aspect-[4/3] w-full overflow-hidden" suppressHydrationWarning>
         <ProductImage
           src={product.image}
-          alt={t("catalog.imageAlt", { title: product.title })}
+          alt={t("catalog.imageAlt", { title: L.title })}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
         {product.isDemo ? (
@@ -160,11 +165,11 @@ export function ProductCard({
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-4">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {product.category?.name || t(productTypeKey(product.productType))}
+          {catName || t(productTypeKey(product.productType))}
         </p>
-        <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{product.title}</h3>
-        {product.shortDescription ? (
-          <p className="line-clamp-2 text-xs text-muted-foreground">{product.shortDescription}</p>
+        <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{L.title}</h3>
+        {L.shortDescription ? (
+          <p className="line-clamp-2 text-xs text-muted-foreground">{L.shortDescription}</p>
         ) : null}
         <PopularityStars popularity={popularity} />
         <div className="mt-auto flex items-end justify-between gap-2 pt-2">
@@ -201,7 +206,7 @@ export function CatalogView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef(0);
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   const load = useCallback(
     async (opts: { cat: string; type: string; sort: string; page: number; q: string }) => {
@@ -312,7 +317,7 @@ export function CatalogView({
             <SelectItem value="all">{t("catalog.allCategories")}</SelectItem>
             {categories.map((c) => (
               <SelectItem key={c.slug} value={c.slug}>
-                {c.name} ({c.productCount})
+                {localizeCategoryName(c.slug, c.name, lang)} ({c.productCount})
               </SelectItem>
             ))}
           </SelectContent>

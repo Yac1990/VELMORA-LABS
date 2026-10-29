@@ -12,6 +12,7 @@ import type { CatalogProduct, CategoryInfo, NavigateFn, StoreSettings } from "./
 import { ProductCard, categoryIcon } from "./catalog";
 import { popularityFor, usePopularity, type PopularityProduct } from "./popularity";
 import { useI18n, seedAware, SEED_DEFAULTS } from "./i18n";
+import { localizeCategoryName } from "./seed-content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -106,7 +107,7 @@ export function LandingView({
   const [recentItems, setRecentItems] = useState<CatalogProduct[] | null>(null);
   const [listError, setListError] = useState(false);
   const { data: popularity, error: popularityError } = usePopularity();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -250,13 +251,14 @@ export function LandingView({
         <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-7">
           {categories.map((c, i) => {
             const Icon = categoryIcon(c.icon);
+            const catName = localizeCategoryName(c.slug, c.name, lang);
             return (
               <FadeUp key={c.slug} delay={Math.min(i * 0.05, 0.3)} className="h-full">
                 <button
                   type="button"
                   onClick={() => onNavigate("catalog", { catalogCat: c.slug })}
                   className="group flex h-full w-full min-h-[44px] flex-col rounded-2xl border border-border/80 bg-white p-3.5 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-                  aria-label={t("home.categoryAria", { name: c.name, count: c.productCount })}
+                  aria-label={t("home.categoryAria", { name: catName, count: c.productCount })}
                 >
                   <span
                     className="brand-gradient flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm transition-transform duration-200 group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
@@ -270,7 +272,7 @@ export function LandingView({
                   </span>
 
                   <span className="mt-3 line-clamp-2 min-h-[2.5rem] text-sm font-bold leading-snug tracking-tight">
-                    {c.name}
+                    {catName}
                   </span>
 
                   <span className="mt-auto flex items-center justify-between gap-2 pt-3">
