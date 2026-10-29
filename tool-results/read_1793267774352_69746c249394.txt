@@ -1,0 +1,1030 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * Task 37-c — internationalisation FR/EN de la boutique publique.
+     5→ *
+     6→ * Source de vérité de la langue : useLang() (zustand persist « velmora-lang »).
+     7→ * Hydratation : `useI18n()` renvoie TOUJOURS « fr » pendant le rendu serveur ET la
+     8→ * première passe client (via useLang → useSyncExternalStore), puis la langue
+     9→ * persistée APRÈS le montage. Aucune lecture de localStorage pendant le rendu,
+    10→ * aucun branchement sur typeof window → aucun écart SSR/client possible.
+    11→ *
+    12→ * Clés : plates, namespacées par préfixe descriptif (nav.*, header.*, home.*,
+    13→ * catalog.*, product.*, inquiry.*, form.*, contact.*, faq.*, legal.*, boot.*,
+    14→ * common.*, lang.*). Les valeurs sont soit une chaîne (avec jetons {nom}
+    15→ * interpolés), soit une fonction (vars) => string pour les pluriels complexes.
+    16→ *
+    17→ * Les DONNÉES (titres/descriptions produits, noms de catégories, messages du
+    18→ * serveur, paramètres admin) restent telles qu'enregistrées en base — principe
+    19→ * « honest data » : seule l'interface est traduite.
+    20→ */
+    21→import { useCallback } from "react";
+    22→import { useLang, type Lang } from "@/store/lang";
+    23→
+    24→export type I18nVars = Record<string, string | number>;
+    25→
+    26→export type DictEntry = string | ((vars: I18nVars) => string);
+    27→
+    28→/** Dictionnaire plat : clé → chaîne (avec jetons {var}) ou fonction de mise en forme. */
+    29→export type Dict = { [key: string]: DictEntry };
+    30→
+    31→/** Élargit les types de valeurs (les littéraux restent utiles aux clés) sans toucher aux clés. */
+    32→type Widen<T extends Record<string, DictEntry>> = { [K in keyof T]: DictEntry };
+    33→
+    34→/* ─────────────────────────────── Français (source) ─────────────────────────────── */
+    35→
+    36→const FR = {
+    37→  /* Générique */
+    38→  "common.retry": "Réessayer",
+    39→  "common.demoBadge": "Démo",
+    40→  "common.privacyLink": "politique de confidentialité",
+    41→
+    42→  /* Sélecteur de langue (libellés bilingues assumés) */
+    43→  "lang.aria": "Choisir la langue / Choose language",
+    44→  "lang.label": "Langue / Language",
+    45→  "lang.fr": "Français",
+    46→  "lang.en": "English",
+    47→
+    48→  /* Navigation */
+    49→  "nav.home": "Accueil",
+    50→  "nav.catalogue": "Catalogue",
+    51→  "nav.faq": "FAQ",
+    52→  "nav.contact": "Contact",
+    53→  "nav.about": "À propos",
+    54→  "nav.mainAria": "Navigation principale",
+    55→  "nav.mobileAria": "Navigation mobile",
+    56→
+    57→  /* En-tête */
+    58→  "header.openMenuAria": "Ouvrir le menu de la boutique",
+    59→  "header.brandHomeAria": "{brand} — retour à l'accueil",
+    60→  "header.logoAlt": "Logo {brand}",
+    61→  "header.searchPlaceholder": "Rechercher un produit…",
+    62→  "header.searchPlaceholderShort": "Rechercher…",
+    63→  "header.searchAria": "Rechercher un produit",
+    64→  "header.searchSubmitAria": "Lancer la recherche",
+    65→  "header.categories": "Catégories",
+    66→  "header.categoriesAria": "Explorer par catégorie",
+    67→  "header.categoriesEmpty": "Aucune catégorie disponible pour le moment.",
+    68→  "header.categoriesEmptyShort": "Aucune catégorie disponible.",
+    69→  "header.categoryItemAria": (vars) => {
+    70→    const n = Number(vars.count);
+    71→    return `Voir la catégorie ${vars.name} — ${n} produit${n > 1 ? "s" : ""}`;
+    72→  },
+    73→  "header.adminAria": "Ouvrir l'espace administrateur (back-office)",
+    74→  "header.adminTitle": "Espace administrateur",
+    75→  "header.adminButton": "Espace administrateur",
+    76→
+    77→  /* Pied de page */
+    78→  "footer.disclosureFallback":
+    79→    "VELMORA LABS regroupe des produits de plusieurs vendeurs. Lorsque vous cliquez sur « Voir l'offre », vous êtes redirigé vers le site du vendeur, où l'achat s'effectue. L'achat ne se fait jamais sur VELMORA LABS.",
+    80→  "footer.shopTitle": "Boutique",
+    81→  "footer.shopAria": "Liens de la boutique",
+    82→  "footer.legalTitle": "Informations légales",
+    83→  "footer.legalAria": "Informations légales",
+    84→  "footer.linkPrivacy": "Politique de confidentialité",
+    85→  "footer.linkTerms": "Conditions d'utilisation",
+    86→  "footer.linkDisclosure": "Fonctionnement de la plateforme",
+    87→  "footer.linkCookies": "Politique cookies",
+    88→  "footer.copyright": "© {year} {brand}. Tous droits réservés.",
+    89→  "footer.priceNotice":
+    90→    "Prix indicatifs fournis par les vendeurs — vérifiez toujours le prix final sur leur site.",
+    91→
+    92→  /* Démarrage de la boutique */
+    93→  "boot.loadingAria": "Chargement de la boutique",
+    94→  "boot.errorTitle": "Impossible de charger la boutique",
+    95→  "boot.errorBody":
+    96→    "Les paramètres du site n'ont pas pu être récupérés. Vérifiez votre connexion, puis réessayez.",
+    97→
+    98→  /* Accueil */
+    99→  "home.badge": "Plateforme multi-produits",
+   100→  "home.titleFallback": "Découvrez plus. Choisissez mieux.",
+   101→  "home.subtitle":
+   102→    "Découvrez et comparez des produits issus de plusieurs vendeurs dans {count} univers. En un clic, rejoignez le site du vendeur pour finaliser votre achat.",
+   103→  "home.searchPlaceholder": "E-book, formation, abonnement, appartement…",
+   104→  "home.searchButton": "Rechercher",
+   105→  "home.heroImageAlt": "Illustration de la boutique VELMORA — sélection multi-catégories de produits",
+   106→  "home.heroFallbackTagline": "Une sélection multi-univers, actualisée en continu",
+   107→  "home.categoriesTitle": "Parcourir par",
+   108→  "home.categoriesAccent": "catégorie",
+   109→  "home.categoriesSubtitle": "Sept univers, un seul comparateur.",
+   110→  "home.allCatalog": "Tout le catalogue",
+   111→  "home.categoryAria": (vars) => {
+   112→    const n = Number(vars.count);
+   113→    return `Voir les produits de la catégorie ${vars.name} (${n} produit${n > 1 ? "s" : ""})`;
+   114→  },
+   115→  "home.productCount": (vars) => {
+   116→    const n = Number(vars.count);
+   117→    return `${n} produit${n > 1 ? "s" : ""}`;
+   118→  },
+   119→  "home.newTitle": "Nouveautés",
+   120→  "home.newSubtitle": "Les derniers ajouts au catalogue.",
+   121→  "home.popularTitle": "Les plus consultés",
+   122→  "home.popularSubtitleMeasured":
+   123→    "Classement établi à partir des clics sortants enregistrés vers les offres (30 derniers jours) — ni des ventes ni des avis.",
+   124→  "home.popularSubtitleDefault": "Une sélection régulièrement consultée par les visiteurs de la boutique.",
+   125→  "home.viewAll": "Tout voir",
+   126→  "home.rowError":
+   127→    "Impossible de charger cette sélection pour le moment — le reste de la boutique reste accessible.",
+   128→  "home.rowLoadingAria": "Chargement — {title}",
+   129→  "home.rowEmpty": "Aucun produit à afficher pour l'instant.",
+   130→  "home.howTitle": "Comment ça marche ?",
+   131→  "home.disclosureFallback":
+   132→    "VELMORA LABS regroupe des produits de plusieurs vendeurs dans sept univers. Lorsque vous cliquez sur « Voir l'offre », vous êtes redirigé vers le site du vendeur, où l'achat s'effectue. La redirection est mesurée de façon strictement anonyme.",
+   133→  "home.howLink": "Découvrir le fonctionnement de la plateforme",
+   134→
+   135→  /* Catalogue */
+   136→  "catalog.type.digital": "Produits numériques",
+   137→  "catalog.type.training": "Formations",
+   138→  "catalog.type.subscription": "Abonnements & SaaS",
+   139→  "catalog.type.home": "Maison",
+   140→  "catalog.type.electronics": "Électronique",
+   141→  "catalog.type.real_estate": "Immobilier",
+   142→  "catalog.type.vehicle": "Véhicules",
+   143→  "catalog.type.other": "Autres",
+   144→  "catalog.type.fallback": "Produit",
+   145→  "catalog.availability.inStock": "En stock (selon le vendeur)",
+   146→  "catalog.availability.outOfStock": "Rupture signalée",
+   147→  "catalog.availability.unknown": "Disponibilité à vérifier sur le site du vendeur",
+   148→  "catalog.popularityAria": (vars) => {
+   149→    const n = Number(vars.count);
+   150→    const nStr = n.toLocaleString("fr-FR");
+   151→    return `Popularité : ${vars.stars} sur 5, mesurée par ${nStr} clic${n > 1 ? "s" : ""} sortant${n > 1 ? "s" : ""} vers les offres sur 30 jours. Ce ne sont ni des notes d'acheteurs ni des ventes.`;
+   152→  },
+   153→  "catalog.clicks": (vars) => {
+   154→    const n = Number(vars.count);
+   155→    return `${n.toLocaleString("fr-FR")} clic${n > 1 ? "s" : ""} · 30 j`;
+   156→  },
+   157→  "catalog.cardAria": "Voir la fiche produit : {title}",
+   158→  "catalog.imageAlt": "Illustration — {title}",
+   159→  "catalog.offersCount": (vars) => `${Number(vars.count).toLocaleString("fr-FR")} offres disponibles`,
+   160→  "catalog.offerComing": "Offre à venir",
+   161→  "catalog.descFallback":
+   162→    "Parcourez les produits et offres de notre sélection multi-catégories. L'achat s'effectue sur le site du vendeur, en un clic.",
+   163→  "catalog.filtersAria": "Filtres du catalogue",
+   164→  "catalog.searchInputAria": "Rechercher dans le catalogue",
+   165→  "catalog.categoryAria": "Filtrer par catégorie",
+   166→  "catalog.categoryPlaceholder": "Catégorie",
+   167→  "catalog.allCategories": "Toutes les catégories",
+   168→  "catalog.typeAria": "Filtrer par type de produit",
+   169→  "catalog.typePlaceholder": "Type",
+   170→  "catalog.allTypes": "Tous les types",
+   171→  "catalog.sortAria": "Trier les résultats",
+   172→  "catalog.sortPlaceholder": "Tri",
+   173→  "catalog.sort.recent": "Plus récents",
+   174→  "catalog.sort.priceAsc": "Prix croissant",
+   175→  "catalog.sort.priceDesc": "Prix décroissant",
+   176→  "catalog.countLine": (vars) => {
+   177→    const n = Number(vars.count);
+   178→    const q = String(vars.q ?? "");
+   179→    return `${n.toLocaleString("fr-FR")} produit${n > 1 ? "s" : ""} trouvé${n > 1 ? "s" : ""}${q ? ` pour « ${q} »` : ""}`;
+   180→  },
+   181→  "catalog.starsNote":
+   182→    "★ = intérêt des visiteurs mesuré par les clics sortants vers les offres (30 derniers jours) — ni des avis d'acheteurs ni des ventes.",
+   183→  "catalog.loadingAria": "Chargement des produits",
+   184→  "catalog.errorTitle": "Le catalogue n'a pas pu être chargé",
+   185→  "catalog.errorFallback": "Erreur de chargement du catalogue",
+   186→  "catalog.emptyTitle": "Aucun produit ne correspond à votre recherche",
+   187→  "catalog.emptyBody": "Essayez d'élargir vos filtres ou de réinitialiser la recherche.",
+   188→  "catalog.resetFilters": "Réinitialiser les filtres",
+   189→  "catalog.paginationAria": "Pagination du catalogue",
+   190→  "catalog.prev": "Précédent",
+   191→  "catalog.next": "Suivant",
+   192→  "catalog.pageAria": "Aller à la page {n}",
+   193→  "catalog.pageInfo": "Page {page} sur {pages} — devise de référence : {currency}",
+   194→
+   195→  /* Fiche produit */
+   196→  "product.loadingAria": "Chargement de la fiche produit",
+   197→  "product.errorFallback": "Erreur de chargement du produit",
+   198→  "product.notFoundTitle": "Produit introuvable",
+   199→  "product.notFoundBody":
+   200→    "Ce produit n'existe plus ou n'est pas publié. Il a peut-être été retiré du catalogue.",
+   201→  "product.errorTitle": "Erreur de chargement",
+   202→  "product.errorBodyFallback": "Réessayez dans un instant.",
+   203→  "product.backToCatalog": "Retour au catalogue",
+   204→  "product.thumbsAria": "Vignettes du produit",
+   205→  "product.thumbAria": "Afficher l'image {index} sur {total}",
+   206→  "product.thumbAlt": "Miniature {index} — {title}",
+   207→  "product.interestNote":
+   208→    "Intérêt des visiteurs — mesuré par les clics sortants, pas une note d'acheteurs.",
+   209→  "product.rangeNote":
+   210→    "Fourchette indicative — le prix final est celui affiché sur le site du vendeur.",
+   211→  "product.descriptionTitle": "Description",
+   212→  "product.featuresTitle": "Caractéristiques",
+   213→  "product.updated": "Mis à jour le {date}",
+   214→  "product.language": "Langue : {lang}",
+   215→  "product.offersTitle": "Offres disponibles ({count})",
+   216→  "product.offersNote":
+   217→    "L'achat, le paiement et le service après-vente s'effectuent sur le site du vendeur.",
+   218→  "product.noOffers": "Aucune offre active pour ce produit actuellement — revenez bientôt.",
+   219→  "product.offerPrice": "Prix sur le site du vendeur : {price}",
+   220→  "product.lastSync": "Dernière synchronisation : {date}",
+   221→  "product.linkChecking": " — lien en cours de vérification",
+   222→  "product.offerTerms": "Conditions de l'offre",
+   223→  "product.viewOn": "Voir sur {partner}",
+   224→  "product.redirectNote": "Vous serez redirigé vers le site du vendeur pour finaliser votre achat.",
+   225→
+   226→  /* Demande de renseignements (fiche produit) */
+   227→  "inquiry.title": "Demander des renseignements",
+   228→  "inquiry.body":
+   229→    "Ce produit est proposé par un vendeur. Envoyez votre demande via VELMORA LABS : après votre consentement explicite, vos coordonnées sont transmises au vendeur, qui vous recontacte directement. Aucun achat ne se fait sur VELMORA LABS.",
+   230→  "inquiry.formAria": "Formulaire de demande de renseignements",
+   231→  "inquiry.phoneLabel": "Téléphone (facultatif)",
+   232→  "inquiry.phonePlaceholder": "+33 6 12 34 56 78",
+   233→  "inquiry.messagePlaceholder": "Précisez votre demande : visite, disponibilité, options…",
+   234→  "inquiry.consentA":
+   235→    "J'accepte que mes informations (nom, adresse e-mail et téléphone si renseigné) soient transmises au vendeur de « {product} » afin d'être recontacté(e) au sujet de ma demande. Ce consentement est nécessaire pour envoyer le formulaire ; je peux le retirer à tout moment via la page Contact. Consultez notre ",
+   236→  "inquiry.consentC": ".",
+   237→  "inquiry.errorConsent": "Votre consentement est requis pour transmettre votre demande au vendeur.",
+   238→  "inquiry.successFallback":
+   239→    "Votre demande a été enregistrée. Le vendeur ou notre équipe vous recontactera.",
+   240→  "inquiry.errorSend": "Échec de l'envoi — réessayez dans quelques instants.",
+   241→  "inquiry.submit": "Envoyer ma demande",
+   242→
+   243→  /* Libellés de formulaires partagés */
+   244→  "form.nameLabel": "Nom complet *",
+   245→  "form.namePlaceholder": "Votre nom",
+   246→  "form.emailLabel": "E-mail *",
+   247→  "form.emailPlaceholder": "vous@exemple.com",
+   248→  "form.messageLabel": "Votre message",
+   249→  "form.messageLabelRequired": "Votre message *",
+   250→  "form.errorName": "Merci d'indiquer votre nom.",
+   251→  "form.errorEmail": "Adresse e-mail invalide.",
+   252→
+   253→  /* Contact */
+   254→  "contact.title": "Contact",
+   255→  "contact.subtitle":
+   256→    "Une question sur une offre, un vendeur, vos données ou le fonctionnement du site ? Écrivez-nous.",
+   257→  "contact.formAria": "Formulaire de contact",
+   258→  "contact.countryLabel": "Pays (facultatif)",
+   259→  "contact.countryPlaceholder": "France, Belgique, Maroc, Canada…",
+   260→  "contact.messagePlaceholder": "Décrivez votre question ou votre demande (10 caractères minimum).",
+   261→  "contact.consentA":
+   262→    "J'accepte que mes informations (nom, adresse e-mail, pays si renseigné et message) soient enregistrées afin de traiter et répondre à ma demande. Ce consentement est nécessaire pour envoyer le formulaire ; je peux le retirer à tout moment. Consultez notre ",
+   263→  "contact.consentC": ".",
+   264→  "contact.errorConsent": "Votre consentement est requis pour traiter votre demande.",
+   265→  "contact.errorMinLength": "Merci de détailler votre message (10 caractères minimum).",
+   266→  "contact.successFallback":
+   267→    "Votre message a bien été enregistré. Notre équipe vous répondra par e-mail.",
+   268→  "contact.errorSend": "Échec de l'envoi — réessayez dans quelques minutes.",
+   269→  "contact.submit": "Envoyer le message",
+   270→  "contact.beforeTitle": "Avant d'écrire",
+   271→  "contact.beforeBody":
+   272→    "Les réponses aux questions fréquentes (fonctionnement, prix, badges « Démo », devises) se trouvent dans la FAQ. Les demandes concernant un bien immobilier ou un véhicule passent par le formulaire de la fiche produit.",
+   273→  "contact.faqButton": "Consulter la FAQ",
+   274→  "contact.transparencyTitle": "Transparence des données",
+   275→  "contact.transparencyBody":
+   276→    "Votre message est enregistré uniquement pour traiter votre demande, conservé au maximum 3 ans, jamais revendu. Détails et droits RGPD dans la politique de confidentialité.",
+   277→  "contact.privacyButton": "Lire la politique de confidentialité",
+   278→
+   279→  /* FAQ */
+   280→  "faq.title": "Foire aux questions",
+   281→  "faq.subtitle":
+   282→    "Fonctionnement, prix, transparence, devises : les réponses aux questions que l'on nous pose le plus souvent.",
+   283→  "faq.q1": "Comment fonctionne la plateforme VELMORA LABS ?",
+   284→  "faq.a1":
+   285→    "VELMORA LABS est une plateforme multi-produits : vous parcourez le catalogue, comparez les produits, les prix et les disponibilités, puis vous cliquez sur « Voir l'offre » pour être redirigé vers le site du vendeur. La redirection est mesurée de façon totalement anonyme, et c'est sur le site du vendeur que l'achat se déroule — nous ne vendons rien nous-mêmes.",
+   286→  "faq.q2": "Est-ce que j'achète directement sur VELMORA LABS ?",
+   287→  "faq.a2":
+   288→    "Non, jamais. Le paiement, la facturation, la livraison, la garantie et le service après-vente sont assurés par le vendeur, selon ses propres conditions générales. VELMORA LABS ne vous demande jamais de coordonnées bancaires et ne traite aucune commande.",
+   289→  "faq.q3": "La consultation du site est-elle payante ?",
+   290→  "faq.a3":
+   291→    "Non. Parcourir le catalogue, comparer les prix et consulter les fiches produits est entièrement gratuit, sans compte à créer. Si vous décidez d'acheter, cela se fait directement sur le site du vendeur, selon ses propres conditions et prix.",
+   292→  "faq.q4": "Les prix affichés sont-ils fiables ?",
+   293→  "faq.a4":
+   294→    "Les prix et disponibilités sont synchronisés régulièrement avec les données des vendeurs, et chaque fiche indique la date de dernière mise à jour de chaque offre. Ils restent toutefois indicatifs : les vendeurs peuvent modifier leurs prix à tout moment. Avant d'acheter, vérifiez toujours le prix final affiché sur le site du vendeur — c'est lui qui fait foi.",
+   295→  "faq.q5": "Que signifie le badge « Démo » ?",
+   296→  "faq.a5":
+   297→    "Le badge « Démo » signale un contenu de démonstration : vendeur ou produit fictif, utilisé pour montrer le fonctionnement de la plateforme. Aucune vraie offre ne se cache derrière un élément marqué « Démo », et le bandeau affiché en haut du site vous prévient lorsque le catalogue est en mode démonstration.",
+   298→  "faq.q6": "Pourquoi certains biens (immobilier, véhicules) affichent-ils une fourchette de prix ?",
+   299→  "faq.a6":
+   300→    "Pour les annonces de vendeurs (appartements, maisons, véhicules), le prix dépend de l'état, des options et de la négociation : nous affichons donc une fourchette indicative plutôt qu'un faux prix unique. Pour obtenir le prix réel et les conditions, utilisez le formulaire « Demander des renseignements » de la fiche : après votre consentement, votre demande est transmise au vendeur qui vous recontacte.",
+   301→  "faq.q7": "Comment poser une question sur un bien immobilier ou un véhicule ?",
+   302→  "faq.a7":
+   303→    "Ouvrez la fiche du bien et complétez le formulaire « Demander des renseignements » (nom, e-mail, téléphone facultatif, message). Votre demande part vers le vendeur uniquement si vous cochez la case de consentement — sans elle, rien n'est envoyé. Vous pouvez retirer votre consentement à tout moment via la page Contact.",
+   304→  "faq.q8": "Dans quelle devise les prix sont-ils affichés ?",
+   305→  "faq.a8":
+   306→    "La boutique utilise une devise de référence (l'euro par défaut), identique pour toutes les fiches afin de permettre la comparaison. Le vendeur peut toutefois facturer dans sa propre devise : le montant final facturé, le taux de change appliqué et d'éventuels frais bancaires dépendent du vendeur et de votre moyen de paiement — vérifiez-les sur le site du vendeur avant de valider.",
+   307→  "faq.notFound": "Vous ne trouvez pas la réponse à votre question ?",
+   308→  "faq.writeUs": "Écrivez-nous : nous lisons tous les messages.",
+   309→  "faq.contactButton": "Nous contacter",
+   310→
+   311→  /* Pages légales */
+   312→  "legal.updated": "Dernière mise à jour : juillet 2025",
+   313→
+   314→  "legal.privacy.title": "Politique de confidentialité",
+   315→  "legal.privacy.intro":
+   316→    "VELMORA LABS est une plateforme multi-produits : nous collectons le minimum de données nécessaire pour répondre à vos demandes et mesurer, de façon anonyme, l'usage du site. Nous ne vendons jamais vos données et l'achat s'effectue sur le site du vendeur.",
+   317→  "legal.privacy.s1.title": "1. Responsable du traitement",
+   318→  "legal.privacy.s1.body":
+   319→    "Le responsable du traitement des données collectées sur ce site est VELMORA LABS. Pour toute question relative à vos données, utilisez le formulaire de la page Contact : c'est notre canal officiel de prise de contact, nous répondons dans les meilleurs délais.",
+   320→  "legal.privacy.s2.title": "2. Données que nous collectons",
+   321→  "legal.privacy.s2.lead1": "Données que vous nous transmettez volontairement :",
+   322→  "legal.privacy.s2.b1":
+   323→    "Formulaire de contact : nom, adresse e-mail, pays (facultatif) et message.",
+   324→  "legal.privacy.s2.b2":
+   325→    "Demande de renseignements (immobilier, véhicules) : nom, adresse e-mail, téléphone (facultatif), message et le produit consulté. Ces éléments sont transmis au vendeur concerné uniquement après votre consentement explicite (case à cocher obligatoire).",
+   326→  "legal.privacy.s2.lead2": "Données de navigation, strictement anonymisées :",
+   327→  "legal.privacy.s2.b3":
+   328→    "Clics sortants (redirections) : chaque clic est enregistré avec un identifiant de session haché (empreinte non réversible recalculée chaque jour), le pays approximatif déduit de l'infrastructure réseau, la page de provenance tronquée et l'offre concernée. Aucune donnée personnelle n'est associée.",
+   329→  "legal.privacy.s2.b4":
+   330→    "Nous n'utilisons ni cookie publicitaire, ni traceur tiers, ni profilage publicitaire. Aucune donnée de paiement n'est jamais collectée : l'achat s'effectue intégralement sur le site du vendeur.",
+   331→  "legal.privacy.s2.tail":
+   332→    "Le site ne propose pas de compte client : nous ne demandons ni mot de passe, ni pièce d'identité, ni coordonnées bancaires.",
+   333→  "legal.privacy.s3.title": "3. Finalités et bases légales",
+   334→  "legal.privacy.s3.b1":
+   335→    "Répondre à vos demandes (contact, demande de renseignements) — base légale : votre consentement, matérialisé par la case à cocher obligatoire du formulaire.",
+   336→  "legal.privacy.s3.b2":
+   337→    "Transmettre votre demande au vendeur concerné (immobilier / véhicules) — base légale : votre consentement explicite, révocable à tout moment.",
+   338→  "legal.privacy.s3.b3":
+   339→    "Mesurer l'audience du site de façon anonyme (comptage de clics agrégé, sans donnée personnelle) — base légale : intérêt légitime, sous réserve d'anonymisation complète.",
+   340→  "legal.privacy.s3.b4":
+   341→    "Assurer la sécurité du site et prévenir les abus (limitations de débit, vérification des destinations de redirection) — base légale : intérêt légitime.",
+   342→  "legal.privacy.s4.title": "4. Durées de conservation",
+   343→  "legal.privacy.s4.b1":
+   344→    "Demandes de contact et de renseignements : 3 ans maximum après le dernier échange avec vous, puis anonymisation ou suppression. Un contact ayant retiré son consentement est traité comme unsubscribed et n'est plus sollicité.",
+   345→  "legal.privacy.s4.b2":
+   346→    "Événements de clic : conservés 24 mois au maximum, sous forme anonymisée et agrégée (statistiques internes sans donnée personnelle).",
+   347→  "legal.privacy.s4.b3":
+   348→    "Preuves de consentement : conservées pendant la durée de la relation puis archivées conformément aux obligations légales de justification.",
+   349→  "legal.privacy.s5.title": "5. Destinataires des données",
+   350→  "legal.privacy.s5.b1": "Notre équipe interne, uniquement pour traiter votre demande.",
+   351→  "legal.privacy.s5.b2":
+   352→    "Le vendeur du produit concerné, uniquement dans le cadre d'une demande de renseignements et uniquement après votre consentement explicite.",
+   353→  "legal.privacy.s5.b3":
+   354→    "Notre hébergeur technique, agissant en qualité de sous-traitant, dans des conditions contractuelles de protection des données.",
+   355→  "legal.privacy.s5.tail":
+   356→    "Nous ne vendons, ne louons et ne cédons vos données à aucun tiers à des fins publicitaires. Aucune mesure d'audience tierce (régies publicitaires, réseaux sociaux) n'est présente sur le site.",
+   357→  "legal.privacy.s6.title": "6. Vos droits (RGPD)",
+   358→  "legal.privacy.s6.lead":
+   359→    "Conformément au Règlement général sur la protection des données (UE 2016/679) et aux lois nationales applicables, vous disposez des droits suivants :",
+   360→  "legal.privacy.s6.b1": "droit d'accès à vos données ;",
+   361→  "legal.privacy.s6.b2": "droit de rectification ;",
+   362→  "legal.privacy.s6.b3": "droit à l'effacement (« droit à l'oubli ») ;",
+   363→  "legal.privacy.s6.b4": "droit à la limitation du traitement ;",
+   364→  "legal.privacy.s6.b5": "droit d'opposition ;",
+   365→  "legal.privacy.s6.b6": "droit à la portabilité de vos données ;",
+   366→  "legal.privacy.s6.b7":
+   367→    "droit de retirer votre consentement à tout moment, sans affecter la licéité du traitement antérieur.",
+   368→  "legal.privacy.s6.tail":
+   369→    "Pour exercer ces droits, écrivez-nous via la page Contact en précisant l'adresse e-mail concernée. Si vous estimez, après nous avoir contactés, que vos droits ne sont pas respectés, vous pouvez introduire une réclamation auprès de la CNIL (France) ou de l'autorité de protection des données de votre pays de résidence.",
+   370→  "legal.privacy.s7.title": "7. Sécurité",
+   371→  "legal.privacy.s7.body":
+   372→    "Les échanges transitent chiffrés. L'accès à l'outillage interne est protégé par des sessions signées et à usage restreint ; les actions sensibles sont journalisées. Les données sont minimisées à la source : nous ne collectons que les champs explicitement indiqués sur les formulaires.",
+   373→  "legal.privacy.s8.title": "8. Cookies et traceurs",
+   374→  "legal.privacy.s8.before": "Notre approche est décrite en détail dans la ",
+   375→  "legal.privacy.s8.emphasis": "Politique cookies",
+   376→  "legal.privacy.s8.after":
+   377→    " : pas de cookies publicitaires ni de traceurs tiers, uniquement ce qui est strictement nécessaire.",
+   378→
+   379→  "legal.terms.title": "Conditions d'utilisation",
+   380→  "legal.terms.intro":
+   381→    "Les présentes conditions encadrent l'utilisation du site VELMORA LABS, plateforme multi-produits. En naviguant sur le site, vous les acceptez. Le site ne vend aucun produit : il regroupe et présente des offres de plusieurs vendeurs.",
+   382→  "legal.terms.s1.title": "1. Objet",
+   383→  "legal.terms.s1.body":
+   384→    "VELMORA LABS met à disposition un service gratuit de regroupement et de présentation d'offres issues de plusieurs vendeurs, dans sept catégories : produits numériques, formations, abonnements & SaaS, maison, électronique, immobilier et véhicules.",
+   385→  "legal.terms.s2.title": "2. Nature du service — vous n'achetez pas sur ce site",
+   386→  "legal.terms.s2.b1":
+   387→    "VELMORA LABS n'est ni le vendeur, ni le fabricant, ni l'annonceur des produits présentés.",
+   388→  "legal.terms.s2.b2":
+   389→    "Le contrat de vente se conclut exclusivement entre vous et le vendeur, sur le site du vendeur, selon ses propres conditions générales.",
+   390→  "legal.terms.s2.b3":
+   391→    "Le paiement, la facturation, la livraison, la garantie et le service après-vente relèvent entièrement du vendeur.",
+   392→  "legal.terms.s2.b4":
+   393→    "Les prix, fourchettes de prix et disponibilités affichés sont indicatifs, synchronisés régulièrement avec les données des vendeurs et peuvent varier à tout moment. Seul le prix affiché sur le site du vendeur au moment de l'achat fait foi.",
+   394→  "legal.terms.s3.title": "3. Redirection vers le site du vendeur",
+   395→  "legal.terms.s3.body":
+   396→    "Les boutons d'achat (« Voir sur [nom du vendeur] ») pointent vers un endpoint de redirection suivie qui enregistre un clic strictement anonyme avant de vous rediriger vers le site du vendeur, où l'achat se finalise. Cette mesure anonyme nous permet de comprendre l'intérêt des visiteurs et d'améliorer la sélection. Ce mécanisme est détaillé dans la page « Fonctionnement de la plateforme ».",
+   397→  "legal.terms.s4.title": "4. Utilisation du site",
+   398→  "legal.terms.s4.lead": "Vous vous engagez à utiliser le site de manière loyale et licite, et notamment à :",
+   399→  "legal.terms.s4.b1": "ne pas tenter d'altérer, de surcharger ou de contourner les mesures de sécurité du site ;",
+   400→  "legal.terms.s4.b2": "ne pas générer artificiellement des clics sur les redirections (fraude au clic) ;",
+   401→  "legal.terms.s4.b3": "ne pas extraire massivement le contenu du catalogue sans autorisation écrite ;",
+   402→  "legal.terms.s4.b4": "fournir des informations exactes dans les formulaires et ne pas usurper l'identité d'autrui.",
+   403→  "legal.terms.s5.title": "5. Propriété intellectuelle",
+   404→  "legal.terms.s5.body":
+   405→    "La marque, le logo, les textes et l'interface du site sont la propriété de VELMORA LABS ou de ses licenciés. Les noms, visuels et descriptions des produits appartiennent à leurs propriétaires respectifs (vendeurs ou fabricants) et sont utilisés dans le cadre strict de la présentation comparative.",
+   406→  "legal.terms.s6.title": "6. Disponibilité et exactitude",
+   407→  "legal.terms.s6.body":
+   408→    "Le service est fourni « en l'état », avec soin mais sans garantie d'interruption nulle. Le catalogue évolue en continu : certains produits peuvent devenir indisponibles ou voir leurs prix modifiés. En cas d'erreur manifeste de prix sur le site du vendeur, c'est la procédure du vendeur qui s'applique ; nous vous invitons à vérifier le prix final avant tout achat.",
+   409→  "legal.terms.s7.title": "7. Responsabilité",
+   410→  "legal.terms.s7.body":
+   411→    "La responsabilité de VELMORA LABS ne peut être engagée que pour des dommages directs résultant d'une faute imputable au site. Elle est expressément exclue pour le contenu, les pratiques commerciales, la livraison et le service après-vente des sites vendeurs, vers lesquels nos liens vous redirigent de façon clairement identifiée.",
+   412→  "legal.terms.s8.title": "8. Droit applicable et réclamations",
+   413→  "legal.terms.s8.body":
+   414→    "Les présentes conditions sont soumises au droit français. En cas de différend, une solution amiable sera recherchée en priorité via la page Contact, avant toute action judiciaire. Nous pouvons faire évoluer ces conditions pour refléter l'amélioration du service ; la version applicable est celle publiée sur cette page, avec sa date de mise à jour.",
+   415→
+   416→  "legal.disclosure.title": "Fonctionnement de la plateforme",
+   417→  "legal.disclosure.intro":
+   418→    "VELMORA LABS est une plateforme multi-produits qui regroupe des produits provenant de plusieurs vendeurs et sources. Voici, en toute transparence, comment fonctionne le site — et ce que cela ne change pas pour vous.",
+   419→  "legal.disclosure.s1.title": "1. Le parcours en trois étapes",
+   420→  "legal.disclosure.s1.step1.title": "Vous parcourez le catalogue.",
+   421→  "legal.disclosure.s1.step1.text":
+   422→    "Vous découvrez les produits, prix et disponibilités indiqués pour chaque offre, toutes catégories confondues.",
+   423→  "legal.disclosure.s1.step2.title": "Vous cliquez sur « Voir sur [nom du vendeur] ».",
+   424→  "legal.disclosure.s1.step2.text":
+   425→    "Le bouton mène vers une redirection suivie (/api/go) qui enregistre un clic strictement anonyme, puis vous envoie sur le site du vendeur.",
+   426→  "legal.disclosure.s1.step3.title": "Vous achetez sur le site du vendeur.",
+   427→  "legal.disclosure.s1.step3.text":
+   428→    "La commande, le paiement et le service après-vente se font entièrement chez le vendeur, selon ses conditions. Nous ne voyons jamais votre panier ni vos moyens de paiement.",
+   429→  "legal.disclosure.s2.title": "2. Prix et disponibilités",
+   430→  "legal.disclosure.s2.body":
+   431→    "Les prix et disponibilités affichés sont synchronisés régulièrement depuis les données des vendeurs et horodatés : chaque fiche indique sa dernière mise à jour. Ils restent indicatifs — les vendeurs peuvent modifier leurs prix à tout moment, et seul le prix affiché sur le site du vendeur au moment de l'achat fait foi.",
+   432→  "legal.disclosure.s3.title": "3. Une mesure strictement anonyme",
+   433→  "legal.disclosure.s3.body":
+   434→    "Chaque redirection est enregistrée côté serveur sous forme anonyme : empreinte hachée non réversible, recalculée chaque jour, sans aucune donnée personnelle. Cela nous permet d'alimenter le classement « Les plus consultés », de repérer les liens rompus et d'améliorer la sélection — sans jamais identifier les visiteurs ni les suivre d'un site à l'autre.",
+   435→  "legal.disclosure.s4.title": "4. Nos engagements",
+   436→  "legal.disclosure.s4.b1":
+   437→    "Le classement et la sélection des produits ne sont pas vendus : aucun vendeur ne paie pour apparaître « mieux classé ».",
+   438→  "legal.disclosure.s4.b2":
+   439→    "Les prix et disponibilités proviennent des données synchronisées des vendeurs et sont affichés tels quels, y compris lorsqu'une offre est moins compétitive qu'une autre.",
+   440→  "legal.disclosure.s4.b3":
+   441→    "Chaque destination de redirection est contrôlée contre une liste blanche de domaines et les liens sont testés régulièrement. Un lien signalé rompu est retiré de la redirection.",
+   442→  "legal.disclosure.s4.b4":
+   443→    "Aucune donnée personnelle n'est enregistrée lors des redirections : pas de compte client, pas de cookie publicitaire.",
+   444→  "legal.disclosure.s5.title": "5. Questions",
+   445→  "legal.disclosure.s5.body":
+   446→    "Une question sur le fonctionnement du site, sur un vendeur ou sur une offre ? La page Contact est le bon canal : nous lisons tout et répondons.",
+   447→
+   448→  "legal.cookies.title": "Politique cookies",
+   449→  "legal.cookies.intro":
+   450→    "VELMORA LABS n'utilise ni cookie publicitaire, ni traceur tiers. Cette page explique, en détail, ce qui est stocké sur votre appareil (et ce qui ne l'est pas).",
+   451→  "legal.cookies.s1.title": "1. Notre approche",
+   452→  "legal.cookies.s1.before":
+   453→    "Un cookie est un petit fichier déposé sur votre appareil par un site web. Nous avons fait un choix simple : limiter le stockage au strict nécessaire. Concrètement, il n'y a ",
+   454→  "legal.cookies.s1.emphasis":
+   455→    "aucun cookie de publicité ciblée, aucun pixel de réseau social et aucun cookie de mesure d'audience tierce",
+   456→  "legal.cookies.s1.after": " sur ce site.",
+   457→  "legal.cookies.s2.title": "2. Ce que nous utilisons",
+   458→  "legal.cookies.s2.b1":
+   459→    "Cookies strictement nécessaires (cas échéant) : sécurité et session de l'outillage interne réservé aux administrateurs. Ils ne déposent rien sur les appareils des visiteurs de la boutique publique.",
+   460→  "legal.cookies.s2.b2":
+   461→    "Mesure d'audience interne, sans cookie : les clics sur les redirections sortantes sont enregistrés côté serveur avec une empreinte hachée non réversible, recalculée chaque jour, qui ne permet ni de vous identifier ni de vous suivre d'un site à l'autre. Aucun identifiant n'est stocké sur votre appareil.",
+   462→  "legal.cookies.s2.b3":
+   463→    "Préférences d'affichage : certains réglages d'interface peuvent être mémorisés localement (stockage local du navigateur) pour améliorer votre confort de navigation. Ils ne contiennent aucune donnée personnelle.",
+   464→  "legal.cookies.s3.title": "3. Ce que nous n'utilisons pas",
+   465→  "legal.cookies.s3.b1": "pas de cookies de régie publicitaire ni de retargeting ;",
+   466→  "legal.cookies.s3.b2": "pas de widgets ou boutons de réseaux sociaux qui pistent votre navigation ;",
+   467→  "legal.cookies.s3.b3": "pas de vente ou de partage de données de navigation avec des tiers.",
+   468→  "legal.cookies.s4.title": "4. Gérer les cookies depuis votre navigateur",
+   469→  "legal.cookies.s4.body":
+   470→    "Vous pouvez à tout moment consulter, bloquer ou supprimer les cookies depuis les réglages de votre navigateur (généralement dans « Confidentialité et sécurité »). Comme nous ne déposons pas de cookies de suivi sur la boutique publique, leur blocage n'altère pas la navigation ; en revanche, bloquer les cookies techniques peut déconnecter une session d'administration légitime.",
+   471→  "legal.cookies.s5.title": "5. Évolutions",
+   472→  "legal.cookies.s5.body":
+   473→    "Si nous devions un jour ajouter un traceur non essentiel (par exemple une mesure d'audience tierce), il serait soumis à votre consentement préalable via un bandeau dédié, et cette page serait mise à jour avec sa date de révision.",
+   474→
+   475→  "legal.about.title": "À propos de VELMORA LABS",
+   476→  "legal.about.intro":
+   477→    "VELMORA LABS est une plateforme multi-produits internationale : un seul site pour découvrir des produits numériques, formations, abonnements, articles de maison, électronique, biens immobiliers et véhicules, proposés par plusieurs vendeurs vérifiés.",
+   478→  "legal.about.s1.title": "1. Notre mission",
+   479→  "legal.about.s1.body":
+   480→    "Le commerce en ligne est éclaté : chaque vendeur annonce ses prix dans sa propre bulle. Notre mission est de remettre de la lisibilité — regrouper des offres de catégories très différentes, afficher les prix au même endroit, et indiquer clairement quand vous quittez le site pour finaliser un achat chez le vendeur.",
+   481→  "legal.about.s2.title": "2. Comment nous travaillons",
+   482→  "legal.about.s2.step1.title": "Sélection des vendeurs.",
+   483→  "legal.about.s2.step1.text":
+   484→    "Chaque source est vérifiée avant publication : destinations contrôlées contre une liste blanche de domaines, liens testés régulièrement.",
+   485→  "legal.about.s2.step2.title": "Synchronisation du catalogue.",
+   486→  "legal.about.s2.step2.text":
+   487→    "Prix, fourchettes et disponibilités proviennent des données des vendeurs, horodatées et rafraîchies ; chaque fiche indique sa dernière mise à jour.",
+   488→  "legal.about.s2.step3.title": "Redirection claire.",
+   489→  "legal.about.s2.step3.text":
+   490→    "Un clic sur « Voir sur [nom du vendeur] » passe par notre redirection suivie, enregistrée de façon anonyme, puis vous arrivez sur le site du vendeur pour finaliser l'achat.",
+   491→  "legal.about.s3.title": "3. Nos engagements",
+   492→  "legal.about.s3.b1":
+   493→    "Sources indiquées : chaque fiche précise l'offre concernée et la date de sa dernière mise à jour.",
+   494→  "legal.about.s3.b2":
+   495→    "Données minimisées : pas de compte client, pas de cookie publicitaire, clics enregistrés sans donnée personnelle.",
+   496→  "legal.about.s3.b3":
+   497→    "Consentement explicite : aucune coordonnée n'est transmise à un vendeur sans la case de consentement cochée.",
+   498→  "legal.about.s3.b4":
+   499→    "Jamais de vente directe : nous ne prenons ni paiement, ni commande ; l'achat se fait sur le site du vendeur.",
+   500→  "legal.about.s4.title": "4. Nous contacter",
+   501→  "legal.about.s4.body":
+   502→    "Une question, une correction de prix, un signalement ? La page Contact est le canal le plus rapide. Les questions fréquentes (fonctionnement, prix, devises) ont leur page FAQ.",
+   503→} satisfies Record<string, DictEntry>;
+   504→
+   505→/* ──────────────────────────────── English ──────────────────────────────── */
+   506→
+   507→const EN: Widen<typeof FR> = {
+   508→  /* Generic */
+   509→  "common.retry": "Retry",
+   510→  "common.demoBadge": "Demo",
+   511→  "common.privacyLink": "privacy policy",
+   512→
+   513→  /* Language switcher (deliberately bilingual labels) */
+   514→  "lang.aria": "Choisir la langue / Choose language",
+   515→  "lang.label": "Langue / Language",
+   516→  "lang.fr": "Français",
+   517→  "lang.en": "English",
+   518→
+   519→  /* Navigation */
+   520→  "nav.home": "Home",
+   521→  "nav.catalogue": "Catalog",
+   522→  "nav.faq": "FAQ",
+   523→  "nav.contact": "Contact",
+   524→  "nav.about": "About",
+   525→  "nav.mainAria": "Main navigation",
+   526→  "nav.mobileAria": "Mobile navigation",
+   527→
+   528→  /* Header */
+   529→  "header.openMenuAria": "Open the store menu",
+   530→  "header.brandHomeAria": "{brand} — back to home",
+   531→  "header.logoAlt": "{brand} logo",
+   532→  "header.searchPlaceholder": "Search for a product…",
+   533→  "header.searchPlaceholderShort": "Search…",
+   534→  "header.searchAria": "Search for a product",
+   535→  "header.searchSubmitAria": "Run the search",
+   536→  "header.categories": "Categories",
+   537→  "header.categoriesAria": "Browse by category",
+   538→  "header.categoriesEmpty": "No categories available at the moment.",
+   539→  "header.categoriesEmptyShort": "No categories available.",
+   540→  "header.categoryItemAria": (vars) => {
+   541→    const n = Number(vars.count);
+   542→    return `View the ${vars.name} category — ${n} product${n > 1 ? "s" : ""}`;
+   543→  },
+   544→  "header.adminAria": "Open the admin area (back office)",
+   545→  "header.adminTitle": "Admin area",
+   546→  "header.adminButton": "Admin area",
+   547→
+   548→  /* Footer */
+   549→  "footer.disclosureFallback":
+   550→    "VELMORA LABS aggregates products from several sellers. When you click on “View the offer”, you are redirected to the seller's website, where the purchase takes place. The purchase is never made on VELMORA LABS.",
+   551→  "footer.shopTitle": "Store",
+   552→  "footer.shopAria": "Store links",
+   553→  "footer.legalTitle": "Legal information",
+   554→  "footer.legalAria": "Legal information",
+   555→  "footer.linkPrivacy": "Privacy policy",
+   556→  "footer.linkTerms": "Terms of use",
+   557→  "footer.linkDisclosure": "How the platform works",
+   558→  "footer.linkCookies": "Cookie policy",
+   559→  "footer.copyright": "© {year} {brand}. All rights reserved.",
+   560→  "footer.priceNotice":
+   561→    "Indicative prices provided by the sellers — always check the final price on their website.",
+   562→
+   563→  /* Store boot */
+   564→  "boot.loadingAria": "Loading the store",
+   565→  "boot.errorTitle": "Unable to load the store",
+   566→  "boot.errorBody":
+   567→    "The site settings could not be retrieved. Check your connection, then try again.",
+   568→
+   569→  /* Home */
+   570→  "home.badge": "Multi-product platform",
+   571→  "home.titleFallback": "Discover more. Choose better.",
+   572→  "home.subtitle":
+   573→    "Discover and compare products from several sellers across {count} universes. In one click, go to the seller's website to complete your purchase.",
+   574→  "home.searchPlaceholder": "E-book, training course, subscription, apartment…",
+   575→  "home.searchButton": "Search",
+   576→  "home.heroImageAlt": "VELMORA store illustration — multi-category product selection",
+   577→  "home.heroFallbackTagline": "A multi-universe selection, continuously updated",
+   578→  "home.categoriesTitle": "Browse by",
+   579→  "home.categoriesAccent": "category",
+   580→  "home.categoriesSubtitle": "Seven universes, one single comparison site.",
+   581→  "home.allCatalog": "The whole catalog",
+   582→  "home.categoryAria": (vars) => {
+   583→    const n = Number(vars.count);
+   584→    return `View the products in the ${vars.name} category (${n} product${n > 1 ? "s" : ""})`;
+   585→  },
+   586→  "home.productCount": (vars) => {
+   587→    const n = Number(vars.count);
+   588→    return `${n} product${n > 1 ? "s" : ""}`;
+   589→  },
+   590→  "home.newTitle": "New arrivals",
+   591→  "home.newSubtitle": "The latest additions to the catalog.",
+   592→  "home.popularTitle": "Most viewed",
+   593→  "home.popularSubtitleMeasured":
+   594→    "Ranking based on the outbound clicks recorded towards the offers (last 30 days) — neither sales nor reviews.",
+   595→  "home.popularSubtitleDefault": "A selection regularly viewed by the store's visitors.",
+   596→  "home.viewAll": "View all",
+   597→  "home.rowError":
+   598→    "Unable to load this selection right now — the rest of the store remains accessible.",
+   599→  "home.rowLoadingAria": "Loading — {title}",
+   600→  "home.rowEmpty": "No products to display at the moment.",
+   601→  "home.howTitle": "How does it work?",
+   602→  "home.disclosureFallback":
+   603→    "VELMORA LABS aggregates products from several sellers across seven universes. When you click on “View the offer”, you are redirected to the seller's website, where the purchase takes place. The redirection is measured in a strictly anonymous way.",
+   604→  "home.howLink": "Learn how the platform works",
+   605→
+   606→  /* Catalog */
+   607→  "catalog.type.digital": "Digital products",
+   608→  "catalog.type.training": "Training courses",
+   609→  "catalog.type.subscription": "Subscriptions & SaaS",
+   610→  "catalog.type.home": "Home",
+   611→  "catalog.type.electronics": "Electronics",
+   612→  "catalog.type.real_estate": "Real estate",
+   613→  "catalog.type.vehicle": "Vehicles",
+   614→  "catalog.type.other": "Other",
+   615→  "catalog.type.fallback": "Product",
+   616→  "catalog.availability.inStock": "In stock (per the seller)",
+   617→  "catalog.availability.outOfStock": "Out of stock (reported)",
+   618→  "catalog.availability.unknown": "Availability to be checked on the seller's website",
+   619→  "catalog.popularityAria": (vars) => {
+   620→    const n = Number(vars.count);
+   621→    const nStr = n.toLocaleString("en-US");
+   622→    return `Popularity: ${vars.stars} out of 5, measured by ${nStr} outbound click${n > 1 ? "s" : ""} towards the offers over 30 days. These are neither buyer ratings nor sales.`;
+   623→  },
+   624→  "catalog.clicks": (vars) => {
+   625→    const n = Number(vars.count);
+   626→    return `${n.toLocaleString("en-US")} click${n > 1 ? "s" : ""} · 30 days`;
+   627→  },
+   628→  "catalog.cardAria": "View product page: {title}",
+   629→  "catalog.imageAlt": "Image — {title}",
+   630→  "catalog.offersCount": (vars) => `${Number(vars.count).toLocaleString("en-US")} offers available`,
+   631→  "catalog.offerComing": "Offer coming soon",
+   632→  "catalog.descFallback":
+   633→    "Browse the products and offers of our multi-category selection. Purchases are completed on the seller's website, in one click.",
+   634→  "catalog.filtersAria": "Catalog filters",
+   635→  "catalog.searchInputAria": "Search the catalog",
+   636→  "catalog.categoryAria": "Filter by category",
+   637→  "catalog.categoryPlaceholder": "Category",
+   638→  "catalog.allCategories": "All categories",
+   639→  "catalog.typeAria": "Filter by product type",
+   640→  "catalog.typePlaceholder": "Type",
+   641→  "catalog.allTypes": "All types",
+   642→  "catalog.sortAria": "Sort the results",
+   643→  "catalog.sortPlaceholder": "Sort",
+   644→  "catalog.sort.recent": "Most recent",
+   645→  "catalog.sort.priceAsc": "Price: low to high",
+   646→  "catalog.sort.priceDesc": "Price: high to low",
+   647→  "catalog.countLine": (vars) => {
+   648→    const n = Number(vars.count);
+   649→    const q = String(vars.q ?? "");
+   650→    return `${n.toLocaleString("en-US")} product${n > 1 ? "s" : ""} found${q ? ` for “${q}”` : ""}`;
+   651→  },
+   652→  "catalog.starsNote":
+   653→    "★ = visitor interest measured by the outbound clicks towards the offers (last 30 days) — neither buyer reviews nor sales.",
+   654→  "catalog.loadingAria": "Loading products",
+   655→  "catalog.errorTitle": "The catalog could not be loaded",
+   656→  "catalog.errorFallback": "Failed to load the catalog",
+   657→  "catalog.emptyTitle": "No product matches your search",
+   658→  "catalog.emptyBody": "Try widening your filters or resetting the search.",
+   659→  "catalog.resetFilters": "Reset filters",
+   660→  "catalog.paginationAria": "Catalog pagination",
+   661→  "catalog.prev": "Previous",
+   662→  "catalog.next": "Next",
+   663→  "catalog.pageAria": "Go to page {n}",
+   664→  "catalog.pageInfo": "Page {page} of {pages} — reference currency: {currency}",
+   665→
+   666→  /* Product detail */
+   667→  "product.loadingAria": "Loading the product page",
+   668→  "product.errorFallback": "Failed to load the product",
+   669→  "product.notFoundTitle": "Product not found",
+   670→  "product.notFoundBody":
+   671→    "This product no longer exists or is not published. It may have been removed from the catalog.",
+   672→  "product.errorTitle": "Loading error",
+   673→  "product.errorBodyFallback": "Try again in a moment.",
+   674→  "product.backToCatalog": "Back to the catalog",
+   675→  "product.thumbsAria": "Product thumbnails",
+   676→  "product.thumbAria": "Show image {index} of {total}",
+   677→  "product.thumbAlt": "Thumbnail {index} — {title}",
+   678→  "product.interestNote":
+   679→    "Visitor interest — measured by outbound clicks, not a buyer rating.",
+   680→  "product.rangeNote":
+   681→    "Indicative range — the final price is the one displayed on the seller's website.",
+   682→  "product.descriptionTitle": "Description",
+   683→  "product.featuresTitle": "Specifications",
+   684→  "product.updated": "Updated on {date}",
+   685→  "product.language": "Language: {lang}",
+   686→  "product.offersTitle": "Available offers ({count})",
+   687→  "product.offersNote":
+   688→    "The purchase, the payment and the after-sales service take place on the seller's website.",
+   689→  "product.noOffers": "No active offer for this product at the moment — come back soon.",
+   690→  "product.offerPrice": "Price on the seller's website: {price}",
+   691→  "product.lastSync": "Last sync: {date}",
+   692→  "product.linkChecking": " — link being verified",
+   693→  "product.offerTerms": "Offer terms",
+   694→  "product.viewOn": "View on {partner}",
+   695→  "product.redirectNote": "You will be redirected to the seller's website to complete your purchase.",
+   696→
+   697→  /* Inquiry form (product page) */
+   698→  "inquiry.title": "Request information",
+   699→  "inquiry.body":
+   700→    "This product is offered by a seller. Send your request through VELMORA LABS: after your explicit consent, your contact details are passed on to the seller, who will get back to you directly. No purchase is made on VELMORA LABS.",
+   701→  "inquiry.formAria": "Information request form",
+   702→  "inquiry.phoneLabel": "Phone (optional)",
+   703→  "inquiry.phonePlaceholder": "+33 6 12 34 56 78",
+   704→  "inquiry.messagePlaceholder": "Detail your request: viewing, availability, options…",
+   705→  "inquiry.consentA":
+   706→    "I agree that my information (name, e-mail address and phone number if provided) may be passed on to the seller of “{product}” so that I can be contacted about my request. This consent is required to submit the form; I can withdraw it at any time via the Contact page. See our ",
+   707→  "inquiry.consentC": ".",
+   708→  "inquiry.errorConsent": "Your consent is required to pass your request on to the seller.",
+   709→  "inquiry.successFallback":
+   710→    "Your request has been saved. The seller or our team will get back to you.",
+   711→  "inquiry.errorSend": "Sending failed — try again in a few moments.",
+   712→  "inquiry.submit": "Send my request",
+   713→
+   714→  /* Shared form labels */
+   715→  "form.nameLabel": "Full name *",
+   716→  "form.namePlaceholder": "Your name",
+   717→  "form.emailLabel": "E-mail *",
+   718→  "form.emailPlaceholder": "you@example.com",
+   719→  "form.messageLabel": "Your message",
+   720→  "form.messageLabelRequired": "Your message *",
+   721→  "form.errorName": "Please provide your name.",
+   722→  "form.errorEmail": "Invalid e-mail address.",
+   723→
+   724→  /* Contact */
+   725→  "contact.title": "Contact",
+   726→  "contact.subtitle":
+   727→    "A question about an offer, a seller, your data or how the site works? Write to us.",
+   728→  "contact.formAria": "Contact form",
+   729→  "contact.countryLabel": "Country (optional)",
+   730→  "contact.countryPlaceholder": "France, Belgium, Morocco, Canada…",
+   731→  "contact.messagePlaceholder": "Describe your question or your request (10 characters minimum).",
+   732→  "contact.consentA":
+   733→    "I agree that my information (name, e-mail address, country if provided and message) may be stored in order to process and answer my request. This consent is required to submit the form; I can withdraw it at any time. See our ",
+   734→  "contact.consentC": ".",
+   735→  "contact.errorConsent": "Your consent is required to process your request.",
+   736→  "contact.errorMinLength": "Please elaborate your message (10 characters minimum).",
+   737→  "contact.successFallback":
+   738→    "Your message has been saved. Our team will reply by e-mail.",
+   739→  "contact.errorSend": "Sending failed — try again in a few minutes.",
+   740→  "contact.submit": "Send the message",
+   741→  "contact.beforeTitle": "Before you write",
+   742→  "contact.beforeBody":
+   743→    "The answers to frequently asked questions (how it works, prices, “Demo” badges, currencies) are in the FAQ. Requests about a property or a vehicle go through the product page form.",
+   744→  "contact.faqButton": "Read the FAQ",
+   745→  "contact.transparencyTitle": "Data transparency",
+   746→  "contact.transparencyBody":
+   747→    "Your message is stored only to process your request, kept for 3 years at most, never resold. Details and GDPR rights are in the privacy policy.",
+   748→  "contact.privacyButton": "Read the privacy policy",
+   749→
+   750→  /* FAQ */
+   751→  "faq.title": "Frequently asked questions",
+   752→  "faq.subtitle":
+   753→    "How it works, prices, transparency, currencies: the answers to the questions we are asked most often.",
+   754→  "faq.q1": "How does the VELMORA LABS platform work?",
+   755→  "faq.a1":
+   756→    "VELMORA LABS is a multi-product platform: you browse the catalog, compare products, prices and availabilities, then click on “View the offer” to be redirected to the seller's website. The redirection is measured in a completely anonymous way, and the purchase takes place on the seller's website — we do not sell anything ourselves.",
+   757→  "faq.q2": "Do I buy directly on VELMORA LABS?",
+   758→  "faq.a2":
+   759→    "No, never. Payment, invoicing, delivery, warranty and after-sales service are provided by the seller, under the seller's own terms and conditions. VELMORA LABS never asks you for bank details and processes no order.",
+   760→  "faq.q3": "Does browsing the site cost anything?",
+   761→  "faq.a3":
+   762→    "No. Browsing the catalog, comparing prices and viewing product pages is entirely free, with no account to create. If you decide to buy, this happens directly on the seller's website, under the seller's own terms and prices.",
+   763→  "faq.q4": "Are the displayed prices reliable?",
+   764→  "faq.a4":
+   765→    "Prices and availabilities are synchronised regularly with the sellers' data, and each product page shows the date of the last update of each offer. They nevertheless remain indicative: sellers may change their prices at any time. Before buying, always check the final price displayed on the seller's website — that is the authoritative one.",
+   766→  "faq.q5": "What does the “Demo” badge mean?",
+   767→  "faq.a5":
+   768→    "The “Demo” badge flags demonstration content: a fictitious seller or product, used to show how the platform works. No real offer hides behind an item marked “Demo”, and the banner displayed at the top of the site warns you when the catalog is in demonstration mode.",
+   769→  "faq.q6": "Why do some listings (real estate, vehicles) show a price range?",
+   770→  "faq.a6":
+   771→    "For seller listings (apartments, houses, vehicles), the price depends on the condition, the options and the negotiation: we therefore display an indicative range rather than a fake single price. To get the real price and the terms, use the “Request information” form on the product page: after your consent, your request is passed on to the seller, who will contact you.",
+   772→  "faq.q7": "How do I ask a question about a property or a vehicle?",
+   773→  "faq.a7":
+   774→    "Open the product page and fill in the “Request information” form (name, e-mail, optional phone number, message). Your request is sent to the seller only if you tick the consent box — without it, nothing is sent. You can withdraw your consent at any time via the Contact page.",
+   775→  "faq.q8": "In which currency are prices displayed?",
+   776→  "faq.a8":
+   777→    "The store uses a reference currency (the euro by default), the same for every product page to allow comparison. The seller may nevertheless invoice in their own currency: the final amount charged, the exchange rate applied and any bank fees depend on the seller and your payment method — check them on the seller's website before confirming.",
+   778→  "faq.notFound": "Can't find the answer to your question?",
+   779→  "faq.writeUs": "Write to us: we read every message.",
+   780→  "faq.contactButton": "Contact us",
+   781→
+   782→  /* Legal pages */
+   783→  "legal.updated": "Last updated: July 2025",
+   784→
+   785→  "legal.privacy.title": "Privacy policy",
+   786→  "legal.privacy.intro":
+   787→    "VELMORA LABS is a multi-product platform: we collect the minimum amount of data needed to answer your requests and to measure, anonymously, how the site is used. We never sell your data and the purchase takes place on the seller's website.",
+   788→  "legal.privacy.s1.title": "1. Data controller",
+   789→  "legal.privacy.s1.body":
+   790→    "The data controller for the data collected on this site is VELMORA LABS. For any question about your data, use the form on the Contact page: it is our official contact channel, and we answer as quickly as we can.",
+   791→  "legal.privacy.s2.title": "2. Data we collect",
+   792→  "legal.privacy.s2.lead1": "Data you provide to us voluntarily:",
+   793→  "legal.privacy.s2.b1": "Contact form: name, e-mail address, country (optional) and message.",
+   794→  "legal.privacy.s2.b2":
+   795→    "Information request (real estate, vehicles): name, e-mail address, phone (optional), message and the product viewed. These details are passed on to the seller concerned only after your explicit consent (a mandatory checkbox).",
+   796→  "legal.privacy.s2.lead2": "Browsing data, strictly anonymised:",
+   797→  "legal.privacy.s2.b3":
+   798→    "Outbound clicks (redirections): each click is recorded with a hashed session identifier (a non-reversible fingerprint recomputed every day), the approximate country inferred from the network infrastructure, the truncated referring page and the offer concerned. No personal data is associated.",
+   799→  "legal.privacy.s2.b4":
+   800→    "We use neither advertising cookies nor third-party trackers, and no advertising profiling. No payment data is ever collected: the purchase takes place entirely on the seller's website.",
+   801→  "legal.privacy.s2.tail":
+   802→    "The site has no customer accounts: we never ask for a password, an identity document or bank details.",
+   803→  "legal.privacy.s3.title": "3. Purposes and legal bases",
+   804→  "legal.privacy.s3.b1":
+   805→    "Answering your requests (contact, information request) — legal basis: your consent, materialised by the mandatory checkbox of the form.",
+   806→  "legal.privacy.s3.b2":
+   807→    "Passing your request on to the seller concerned (real estate / vehicles) — legal basis: your explicit consent, revocable at any time.",
+   808→  "legal.privacy.s3.b3":
+   809→    "Measuring the site's audience anonymously (aggregated click counting, with no personal data) — legal basis: legitimate interest, subject to complete anonymisation.",
+   810→  "legal.privacy.s3.b4":
+   811→    "Keeping the site secure and preventing abuse (rate limiting, verification of redirection destinations) — legal basis: legitimate interest.",
+   812→  "legal.privacy.s4.title": "4. Retention periods",
+   813→  "legal.privacy.s4.b1":
+   814→    "Contact and information requests: 3 years at most after the last exchange with you, then anonymisation or deletion. A contact who has withdrawn consent is treated as unsubscribed and is no longer contacted.",
+   815→  "legal.privacy.s4.b2":
+   816→    "Click events: kept 24 months at most, in anonymised and aggregated form (internal statistics with no personal data).",
+   817→  "legal.privacy.s4.b3":
+   818→    "Proof of consent: kept for the duration of the relationship and then archived in accordance with legal proof-keeping obligations.",
+   819→  "legal.privacy.s5.title": "5. Recipients of the data",
+   820→  "legal.privacy.s5.b1": "Our internal team, only to process your request.",
+   821→  "legal.privacy.s5.b2":
+   822→    "The seller of the product concerned, only as part of an information request and only after your explicit consent.",
+   823→  "legal.privacy.s5.b3":
+   824→    "Our technical hosting provider, acting as a processor, under contractual data-protection terms.",
+   825→  "legal.privacy.s5.tail":
+   826→    "We never sell, rent or transfer your data to any third party for advertising purposes. No third-party audience measurement (ad networks, social networks) is present on the site.",
+   827→  "legal.privacy.s6.title": "6. Your rights (GDPR)",
+   828→  "legal.privacy.s6.lead":
+   829→    "In accordance with the General Data Protection Regulation (EU 2016/679) and the applicable national laws, you have the following rights:",
+   830→  "legal.privacy.s6.b1": "right of access to your data;",
+   831→  "legal.privacy.s6.b2": "right to rectification;",
+   832→  "legal.privacy.s6.b3": "right to erasure (“right to be forgotten”);",
+   833→  "legal.privacy.s6.b4": "right to restriction of processing;",
+   834→  "legal.privacy.s6.b5": "right to object;",
+   835→  "legal.privacy.s6.b6": "right to data portability;",
+   836→  "legal.privacy.s6.b7":
+   837→    "right to withdraw your consent at any time, without affecting the lawfulness of the processing carried out before.",
+   838→  "legal.privacy.s6.tail":
+   839→    "To exercise these rights, write to us via the Contact page, mentioning the e-mail address concerned. If you believe, after contacting us, that your rights are not being respected, you can lodge a complaint with the CNIL (France) or with the data-protection authority of your country of residence.",
+   840→  "legal.privacy.s7.title": "7. Security",
+   841→  "legal.privacy.s7.body":
+   842→    "Communications travel encrypted. Access to the internal tooling is protected by signed, restricted-use sessions; sensitive actions are logged. Data is minimised at the source: we only collect the fields explicitly indicated on the forms.",
+   843→  "legal.privacy.s8.title": "8. Cookies and trackers",
+   844→  "legal.privacy.s8.before": "Our approach is described in detail in the ",
+   845→  "legal.privacy.s8.emphasis": "Cookie policy",
+   846→  "legal.privacy.s8.after":
+   847→    ": no advertising cookies or third-party trackers, only what is strictly necessary.",
+   848→
+   849→  "legal.terms.title": "Terms of use",
+   850→  "legal.terms.intro":
+   851→    "These terms govern the use of the VELMORA LABS website, a multi-product platform. By browsing the site, you accept them. The site sells no product: it aggregates and presents offers from several sellers.",
+   852→  "legal.terms.s1.title": "1. Purpose",
+   853→  "legal.terms.s1.body":
+   854→    "VELMORA LABS provides a free service that aggregates and presents offers from several sellers, in seven categories: digital products, training courses, subscriptions & SaaS, home, electronics, real estate and vehicles.",
+   855→  "legal.terms.s2.title": "2. Nature of the service — you do not buy on this site",
+   856→  "legal.terms.s2.b1":
+   857→    "VELMORA LABS is neither the seller, nor the manufacturer, nor the advertiser of the products presented.",
+   858→  "legal.terms.s2.b2":
+   859→    "The sales contract is concluded exclusively between you and the seller, on the seller's website, under the seller's own terms and conditions.",
+   860→  "legal.terms.s2.b3":
+   861→    "Payment, invoicing, delivery, warranty and after-sales service are entirely the seller's responsibility.",
+   862→  "legal.terms.s2.b4":
+   863→    "The prices, price ranges and availabilities displayed are indicative, synchronised regularly with the sellers' data and may change at any time. Only the price displayed on the seller's website at the time of purchase is authoritative.",
+   864→  "legal.terms.s3.title": "3. Redirection to the seller's website",
+   865→  "legal.terms.s3.body":
+   866→    "The buy buttons (“View on [seller name]”) point to a tracked redirection endpoint that records a strictly anonymous click before redirecting you to the seller's website, where the purchase is finalised. This anonymous measurement lets us understand visitors' interest and improve the selection. This mechanism is described on the “How the platform works” page.",
+   867→  "legal.terms.s4.title": "4. Use of the site",
+   868→  "legal.terms.s4.lead": "You agree to use the site in a fair and lawful manner, and in particular to:",
+   869→  "legal.terms.s4.b1": "not attempt to alter, overload or circumvent the site's security measures;",
+   870→  "legal.terms.s4.b2": "not generate artificial clicks on the redirections (click fraud);",
+   871→  "legal.terms.s4.b3": "not extract the catalog content on a massive scale without written authorisation;",
+   872→  "legal.terms.s4.b4": "provide accurate information in the forms and not impersonate anyone.",
+   873→  "legal.terms.s5.title": "5. Intellectual property",
+   874→  "legal.terms.s5.body":
+   875→    "The brand, the logo, the texts and the interface of the site are the property of VELMORA LABS or its licensors. Product names, visuals and descriptions belong to their respective owners (sellers or manufacturers) and are used strictly within the scope of comparative presentation.",
+   876→  "legal.terms.s6.title": "6. Availability and accuracy",
+   877→  "legal.terms.s6.body":
+   878→    "The service is provided “as is”, with care but without any guarantee of uninterrupted availability. The catalog changes continuously: some products may become unavailable or see their prices change. In the event of a manifest pricing error on the seller's website, the seller's own procedure applies; we invite you to check the final price before any purchase.",
+   879→  "legal.terms.s7.title": "7. Liability",
+   880→  "legal.terms.s7.body":
+   881→    "The liability of VELMORA LABS can only be engaged for direct damages resulting from a fault attributable to the site. It is expressly excluded for the content, the business practices, the delivery and the after-sales service of the seller websites, to which our links redirect you in a clearly identified way.",
+   882→  "legal.terms.s8.title": "8. Governing law and complaints",
+   883→  "legal.terms.s8.body":
+   884→    "These terms are governed by French law. In the event of a dispute, an amicable solution will first be sought via the Contact page, before any court action. We may update these terms to reflect improvements to the service; the applicable version is the one published on this page, with its last-updated date.",
+   885→
+   886→  "legal.disclosure.title": "How the platform works",
+   887→  "legal.disclosure.intro":
+   888→    "VELMORA LABS is a multi-product platform that aggregates products from several sellers and sources. Here is, in full transparency, how the site works — and what it does not change for you.",
+   889→  "legal.disclosure.s1.title": "1. The three-step journey",
+   890→  "legal.disclosure.s1.step1.title": "You browse the catalog.",
+   891→  "legal.disclosure.s1.step1.text":
+   892→    "You discover the products, prices and availabilities shown for each offer, across all categories.",
+   893→  "legal.disclosure.s1.step2.title": "You click on “View on [seller name]”.",
+   894→  "legal.disclosure.s1.step2.text":
+   895→    "The button leads to a tracked redirection (/api/go) that records a strictly anonymous click, then sends you to the seller's website.",
+   896→  "legal.disclosure.s1.step3.title": "You buy on the seller's website.",
+   897→  "legal.disclosure.s1.step3.text":
+   898→    "The order, the payment and the after-sales service happen entirely with the seller, under their terms. We never see your basket or your payment methods.",
+   899→  "legal.disclosure.s2.title": "2. Prices and availabilities",
+   900→  "legal.disclosure.s2.body":
+   901→    "The prices and availabilities displayed are synchronised regularly from the sellers' data and timestamped: each product page shows its last update. They remain indicative — sellers may change their prices at any time, and only the price displayed on the seller's website at the time of purchase is authoritative.",
+   902→  "legal.disclosure.s3.title": "3. A strictly anonymous measurement",
+   903→  "legal.disclosure.s3.body":
+   904→    "Each redirection is recorded server-side in anonymous form: a non-reversible hashed fingerprint, recomputed every day, with no personal data whatsoever. This feeds the “Most viewed” ranking, helps detect broken links and improves the selection — without ever identifying visitors or following them from site to site.",
+   905→  "legal.disclosure.s4.title": "4. Our commitments",
+   906→  "legal.disclosure.s4.b1":
+   907→    "Ranking and product selection are not for sale: no seller pays to appear “better ranked”.",
+   908→  "legal.disclosure.s4.b2":
+   909→    "Prices and availabilities come from the sellers' synchronised data and are displayed as they are, including when an offer is less competitive than another.",
+   910→  "legal.disclosure.s4.b3":
+   911→    "Each redirection destination is checked against a domain allow-list and the links are tested regularly. A link reported as broken is removed from the redirection.",
+   912→  "legal.disclosure.s4.b4":
+   913→    "No personal data is recorded during redirections: no customer account, no advertising cookie.",
+   914→  "legal.disclosure.s5.title": "5. Questions",
+   915→  "legal.disclosure.s5.body":
+   916→    "A question about how the site works, about a seller or about an offer? The Contact page is the right channel: we read everything and we answer.",
+   917→
+   918→  "legal.cookies.title": "Cookie policy",
+   919→  "legal.cookies.intro":
+   920→    "VELMORA LABS uses neither advertising cookies nor third-party trackers. This page explains, in detail, what is stored on your device (and what is not).",
+   921→  "legal.cookies.s1.title": "1. Our approach",
+   922→  "legal.cookies.s1.before":
+   923→    "A cookie is a small file placed on your device by a website. We made a simple choice: limit storage to the strict minimum. Concretely, there is ",
+   924→  "legal.cookies.s1.emphasis":
+   925→    "no targeted advertising cookie, no social-network pixel and no third-party audience-measurement cookie",
+   926→  "legal.cookies.s1.after": " on this site.",
+   927→  "legal.cookies.s2.title": "2. What we use",
+   928→  "legal.cookies.s2.b1":
+   929→    "Strictly necessary cookies (where applicable): security and session of the internal tooling reserved for administrators. They place nothing on the devices of visitors to the public store.",
+   930→  "legal.cookies.s2.b2":
+   931→    "Internal audience measurement, without cookies: clicks on outbound redirections are recorded server-side with a non-reversible hashed fingerprint, recomputed every day, which makes it impossible to identify you or to follow you from site to site. No identifier is stored on your device.",
+   932→  "legal.cookies.s2.b3":
+   933→    "Display preferences: some interface settings may be memorised locally (browser local storage) to improve your browsing comfort. They contain no personal data.",
+   934→  "legal.cookies.s3.title": "3. What we do not use",
+   935→  "legal.cookies.s3.b1": "no ad-network or retargeting cookies;",
+   936→  "legal.cookies.s3.b2": "no social-media widgets or buttons that track your browsing;",
+   937→  "legal.cookies.s3.b3": "no sale or sharing of browsing data with third parties.",
+   938→  "legal.cookies.s4.title": "4. Managing cookies from your browser",
+   939→  "legal.cookies.s4.body":
+   940→    "You can review, block or delete cookies at any time from your browser's settings (usually under “Privacy and security”). Since we do not place tracking cookies on the public store, blocking them does not alter your browsing; on the other hand, blocking technical cookies may sign out a legitimate administration session.",
+   941→  "legal.cookies.s5.title": "5. Changes",
+   942→  "legal.cookies.s5.body":
+   943→    "If we ever had to add a non-essential tracker (for example a third-party audience measurement), it would be subject to your prior consent via a dedicated banner, and this page would be updated with its revision date.",
+   944→
+   945→  "legal.about.title": "About VELMORA LABS",
+   946→  "legal.about.intro":
+   947→    "VELMORA LABS is an international multi-product platform: a single site to discover digital products, training courses, subscriptions, home goods, electronics, real estate and vehicles, offered by several verified sellers.",
+   948→  "legal.about.s1.title": "1. Our mission",
+   949→  "legal.about.s1.body":
+   950→    "Online commerce is scattered: every seller advertises its prices in its own bubble. Our mission is to restore readability — aggregate offers from very different categories, display prices in the same place, and clearly indicate when you are leaving the site to complete a purchase with the seller.",
+   951→  "legal.about.s2.title": "2. How we work",
+   952→  "legal.about.s2.step1.title": "Seller selection.",
+   953→  "legal.about.s2.step1.text":
+   954→    "Each source is verified before publication: destinations checked against a domain allow-list, links tested regularly.",
+   955→  "legal.about.s2.step2.title": "Catalog synchronisation.",
+   956→  "legal.about.s2.step2.text":
+   957→    "Prices, ranges and availabilities come from the sellers' data, timestamped and refreshed; each product page shows its last update.",
+   958→  "legal.about.s2.step3.title": "Clear redirection.",
+   959→  "legal.about.s2.step3.text":
+   960→    "A click on “View on [seller name]” goes through our tracked redirection, recorded anonymously, then you arrive on the seller's website to complete the purchase.",
+   961→  "legal.about.s3.title": "3. Our commitments",
+   962→  "legal.about.s3.b1":
+   963→    "Sources indicated: each product page states the offer concerned and the date of its last update.",
+   964→  "legal.about.s3.b2":
+   965→    "Minimised data: no customer account, no advertising cookie, clicks recorded with no personal data.",
+   966→  "legal.about.s3.b3":
+   967→    "Explicit consent: no contact details are passed to a seller without the consent box being ticked.",
+   968→  "legal.about.s3.b4":
+   969→    "Never any direct selling: we take neither payment nor orders; the purchase happens on the seller's website.",
+   970→  "legal.about.s4.title": "4. Contact us",
+   971→  "legal.about.s4.body":
+   972→    "A question, a price correction, a report? The Contact page is the fastest channel. Frequently asked questions (how it works, prices, currencies) have their own FAQ page.",
+   973→};
+   974→
+   975→const DICTS: Record<Lang, Dict> = { fr: FR, en: EN };
+   976→
+   977→/* ─────────────────────────────── Hook public ─────────────────────────────── */
+   978→
+   979→/** Remplace les jetons {nom} par les valeurs fournies (sans toucher aux inconnus). */
+   980→function interpolate(template: string, vars?: I18nVars): string {
+   981→  if (!vars) return template;
+   982→  return template.replace(/\{(\w+)\}/g, (match, name: string) =>
+   983→    Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match
+   984→  );
+   985→}
+   986→
+   987→/**
+   988→ * Accès i18n de la boutique : `lang` courant (fr pendant SSR + hydratation, puis
+   989→ * langue persistée), `setLang` (persisté par zustand) et `t(clé, vars?)` avec
+   990→ * repli en cascade : dict[lang] → dict.fr → la clé elle-même.
+   991→ */
+   992→export function useI18n(): {
+   993→  lang: Lang;
+   994→  setLang: (l: Lang) => void;
+   995→  t: (key: string, vars?: I18nVars) => string;
+   996→  mounted: boolean;
+   997→} {
+   998→  const { lang, setLang, mounted } = useLang();
+   999→  const t = useCallback(
+  1000→    (key: string, vars?: I18nVars): string => {
+  1001→      const entry = DICTS[lang][key] ?? DICTS.fr[key];
+  1002→      if (entry === undefined) return key;
+  1003→      return typeof entry === "function" ? entry(vars ?? {}) : interpolate(entry, vars);
+  1004→    },
+  1005→    [lang]
+  1006→  );
+  1007→  return { lang, setLang, t, mounted };
+  1008→}
+  1009→
+  1010→/** Clés de dictionnaire pour les libellés dérivés de données (type produit, disponibilité). */
+  1011→export function productTypeKey(value: string): string {
+  1012→  const known: Record<string, string> = {
+  1013→    digital: "catalog.type.digital",
+  1014→    training: "catalog.type.training",
+  1015→    subscription: "catalog.type.subscription",
+  1016→    home: "catalog.type.home",
+  1017→    electronics: "catalog.type.electronics",
+  1018→    real_estate: "catalog.type.real_estate",
+  1019→    vehicle: "catalog.type.vehicle",
+  1020→    other: "catalog.type.other",
+  1021→  };
+  1022→  return known[value] ?? "catalog.type.fallback";
+  1023→}
+  1024→
+  1025→export function availabilityKey(availability: string): string {
+  1026→  if (availability === "in_stock") return "catalog.availability.inStock";
+  1027→  if (availability === "out_of_stock") return "catalog.availability.outOfStock";
+  1028→  return "catalog.availability.unknown";
+  1029→}
+  1030→
