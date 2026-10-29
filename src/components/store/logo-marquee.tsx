@@ -1,50 +1,44 @@
 /**
- * Task 19 → 21 — deux bandes de logos partenaires défilant en sens opposés (pied de page,
- * entre « Comment ça marche ? » et les colonnes de liens — position inchangée).
+ * Task 19 → 21 → 40 → 41 → 43 — bande de logos défilante du pied de page
+ * (entre « Comment ça marche ? » et les colonnes de liens — position inchangée).
  *
- * Task 40 — REFONTE PREMIUM : coque unique blanche légèrement bleutée (#F7F9FE), coins
- * arrondis 1,25 rem, bordure fine teintée bleu marque, ombre très discrète, filet
- * séparateur dégradé bleu→violet, fondus latéraux en PETITS CALQUES STATIQUES superposés
- * (JAMAIS un mask sur la grande piste — règle Task 35-bis : corruption GPU Android),
- * survol desktop (pause de la rangée + zoom léger 1,06 + infobulle native title), repli
- * typographique au nom exact si une image échoue, créneaux à largeur fixe (zéro CLS),
- * moteur rAF sans re-render React par image.
+ * Task 43 — REPRODUCTION FIDÈLE DU MODÈLE fourni par le propriétaire (capture
+ * d'écran d'une bande « plateformes ») : UNE SEULE rangée, fond blanc PUR (plus
+ * de coque bleutée, plus d'arrondis, plus de bordure, plus d'ombre, plus de filet
+ * dégradé, plus de fondus latéraux — les logos du modèle sont coupés aux bords),
+ * logos en GRIS MONOCHROME (filtre grayscale + opacité réduite, comme le modèle)
+ * qui retrouvent leurs couleurs au survol (desktop à pointeur fin), espacement
+ * généreux et régulier. Les 17 plateformes RÉELLEMENT intégrées restent affichées
+ * (honnêteté des données : le modèle illustre le STYLE, pas les marques).
  *
- * Task 41 — ANIMATION INCONDITIONNELLE (4e signalement : « LES LOGO SONT TOUJOURS
- * STATIQUE »). Le mode statique « prefers-reduced-motion » (spec Task 40 §4) est
- * SUPPRIMÉ : le panneau de prévisualisation FORCE cette préférence (documenté Task 20,
- * reproduit et prouvé Tasks 37-a/39), et le contexte de visualisation du propriétaire la
- * déclare aussi — chaque version respectant la préférence lui affiche donc un mur statique.
- * Décision propriétaire (Task 39, réaffirmée ici, priorité sur la spec §4) : l'exigence
- * explicite de défilement permanent prime. Le moteur rAF est insensible à cette
- * préférence : le bandeau défile PARTOUT et TOUT LE TEMPS. Accessibilité conservée :
- * mécanisme de pause au survol (WCAG 2.2.2 « Pause, Stop, Hide »), désormais restreint
- * aux pointeurs fins — un tap tactile ne fige plus une rangée. La version statique
- * défilable reste dans l'historique git (commit 1be3de0) et peut être réactivée.
+ * Task 41 (inchangé, non négociable) — ANIMATION INCONDITIONNELLE : 4 signalements
+ * « LES LOGO SONT TOUJOURS STATIQUE » ont prouvé que le panneau de prévisualisation
+ * FORCE prefers-reduced-motion:reduce. AUCUNE porte statique ne doit être
+ * réintroduite : le moteur rAF défile PARTOUT et TOUT LE TEMPS. Accessibilité
+ * (WCAG 2.2.2) : pause au survol restreinte aux pointeurs fins — un tap tactile
+ * ne fige jamais la bande.
  *
- * Boucle sans saut : chaque piste = deux moitiés STRICTEMENT identiques (la seconde est
- * aria-hidden : aucun contenu accessible dupliqué) ; décalage ramené modulo la largeur
- * d'une moitié (mesurée, ResizeObserver) ; REPEATS_PER_HALF garantit une demi-largeur ≥
- * écrans ultra-larges (aucun trou visible). Créneaux à largeur fixe → aucun décalage de
- * mise en page pendant le chargement des images.
+ * Boucle sans saut : piste = deux moitiés STRICTEMENT identiques (la seconde est
+ * aria-hidden) ; décalage modulo la largeur d'une moitié (mesurée, ResizeObserver) ;
+ * REPEATS_PER_HALF garantit une demi-largeur ≥ écrans ultra-larges. Créneaux à
+ * largeur fixe → zéro CLS. Moteur rAF sans re-render React par image.
  *
- * Logos AUTHENTIQUES uniquement : /brands/*.png existants (vérifiés sur disque) —
- * couleurs et proportions d'origine (object-fit: contain), aucun logo inventé, aucune
- * annonce de partenariat officiel. Échec de chargement d'une image → remplacement
- * TYPOGRAPHIQUE sobre au nom exact (état React par slug : les deux moitiés basculent
- * ensemble, la boucle reste sans couture) ; jamais d'icône cassée, de `undefined`, ni de
- * rangée bloquée. Aucun titre, aucun texte introductif, aucun bouton — uniquement les logos.
+ * Logos AUTHENTIQUES uniquement : /brands/*.png vérifiés sur disque, proportions
+ * d'origine (object-fit: contain), aucun logo inventé. Échec de chargement →
+ * repli TYPOGRAPHIQUE gris au nom exact (état par slug : les deux moitiés
+ * basculent ensemble) ; jamais d'icône cassée ni de rangée bloquée. Aucun titre,
+ * aucun texte, aucun bouton — uniquement la bande de logos.
  */
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import styles from "./logo-marquee.module.css";
 
 type Brand = { slug: string; name: string };
 
-/* Plateformes réparties sur les deux bandes (9 + 8), séquences indépendantes.
-   Chaque slug correspond à un fichier /brands/<slug>.png VÉRIFIÉ présent dans le projet. */
-const BAND_TOP: Brand[] = [
+/* Les 17 plateformes réellement intégrées, dans une seule séquence (modèle Task 43 :
+   une seule rangée). Chaque slug correspond à un fichier /brands/<slug>.png VÉRIFIÉ. */
+const BRANDS: Brand[] = [
   { slug: "amazon-associates", name: "Amazon Associates" },
   { slug: "awin", name: "Awin" },
   { slug: "shareasale", name: "ShareASale" },
@@ -54,9 +48,6 @@ const BAND_TOP: Brand[] = [
   { slug: "clickbank", name: "ClickBank" },
   { slug: "ebay-partner-network", name: "eBay Partner Network" },
   { slug: "jumia", name: "Jumia" },
-];
-
-const BAND_BOTTOM: Brand[] = [
   { slug: "chariow", name: "Chariow" },
   { slug: "kwanko", name: "Kwanko" },
   { slug: "partnerstack", name: "PartnerStack" },
@@ -67,15 +58,14 @@ const BAND_BOTTOM: Brand[] = [
   { slug: "digistore24", name: "Digistore24" },
 ];
 
-/** Répétitions de la séquence par moitié de piste : garantit une moitié ≥ largeur d'écran (boucle sans trou). */
-const REPEATS_PER_HALF = 3;
+/** Répétitions de la séquence par moitié : 17 créneaux × 200 px = 3 400 px ≥ la
+    quasi-totalité des écrans ; ×2 couvre les ultra-larges (boucle sans aucun trou). */
+const REPEATS_PER_HALF = 2;
 
-/* Durée (secondes) pour parcourir exactement une moitié : vitesses modérées (≈ 90 px/s
-   et ≈ 71 px/s en desktop) et légèrement différentes — mouvement dynamique et harmonieux. */
-const BANDS: { brands: Brand[]; direction: "left" | "right"; durationS: number }[] = [
-  { brands: BAND_TOP, direction: "left", durationS: 60 },
-  { brands: BAND_BOTTOM, direction: "right", durationS: 68 },
-];
+/* Durée (secondes) pour parcourir exactement une moitié : ≈ 30 px/s comme avant
+   (17 × 200 px ÷ 110 s ≈ 31 px/s) — défilement lent et élégant, sens standard. */
+const DIRECTION = "left" as const;
+const DURATION_S = 110;
 
 /* Aucun abonnement réel : bascule du snapshot serveur (false) au snapshot client (true)
    après hydratation — sans setState dans un effet. */
@@ -100,17 +90,13 @@ export function LogoMarquee() {
   }, []);
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const trackRefs = useRef<(HTMLDivElement | null)[]>([null, null]);
-  const firstHalfRefs = useRef<(HTMLUListElement | null)[]>([null, null]);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const firstHalfRef = useRef<HTMLUListElement | null>(null);
   /* Pause au survol : desktop à pointeur fin UNIQUEMENT — un tap tactile ne doit jamais
-     figer une rangée (pointerleave/pointercancel tactiles peu fiables). */
+     figer la bande (pointerleave/pointercancel tactiles peu fiables). */
   const hoverFineRef = useRef(false);
   /* État mutable hors React : aucune re-render par image (performances). */
-  const engine = useRef({
-    offsets: [0, 0],
-    halfWidths: [0, 0],
-    paused: [false, false],
-  });
+  const engine = useRef({ offset: 0, halfWidth: 0, paused: false });
 
   useEffect(() => {
     if (!ready) return;
@@ -121,16 +107,10 @@ export function LogoMarquee() {
 
     /* Largeur d'une moitié mesurée dynamiquement (chargement des images, responsive). */
     const measure = () => {
-      for (let i = 0; i < 2; i++) {
-        const half = firstHalfRefs.current[i];
-        if (half) s.halfWidths[i] = half.getBoundingClientRect().width;
-      }
+      if (firstHalfRef.current) s.halfWidth = firstHalfRef.current.getBoundingClientRect().width;
     };
     const observer = new ResizeObserver(measure);
-    for (let i = 0; i < 2; i++) {
-      const half = firstHalfRefs.current[i];
-      if (half) observer.observe(half);
-    }
+    if (firstHalfRef.current) observer.observe(firstHalfRef.current);
     measure();
 
     let raf = 0;
@@ -140,24 +120,19 @@ export function LogoMarquee() {
       /* dt borné : aucun saut après un onglet inactif ou une perte de focus. */
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
-      for (let i = 0; i < 2; i++) {
-        const track = trackRefs.current[i];
-        if (!track) continue;
-        const half = s.halfWidths[i];
-        if (half <= 0) continue;
-        if (!s.paused[i]) {
-          const duration = BANDS[i].durationS;
-          s.offsets[i] = (s.offsets[i] + (half / duration) * dt) % half;
+      const track = trackRef.current;
+      if (track && s.halfWidth > 0) {
+        if (!s.paused) {
+          s.offset = (s.offset + (s.halfWidth / DURATION_S) * dt) % s.halfWidth;
         }
-        /* Bande 1 : droite → gauche ; bande 2 : gauche → droite (TOUJOURS opposées).
-           Le repli modulo reste invisible car les deux moitiés sont identiques. */
-        const offset = s.offsets[i];
-        const x = BANDS[i].direction === "left" ? -offset : -(half - offset);
+        /* Sens standard gauche → droite (le repli modulo reste invisible car les
+           deux moitiés sont identiques). */
+        const x = DIRECTION === "left" ? -s.offset : -(s.halfWidth - s.offset);
         track.style.transform = `translate3d(${x}px, 0, 0)`;
       }
       raf = requestAnimationFrame(tick);
     };
-    /* La boucle rAF est SUSPENDUE quand le bandeau est hors écran (IntersectionObserver),
+    /* La boucle rAF est SUSPENDUE quand la bande est hors écran (IntersectionObserver),
        quand l'onglet est masqué, ou pendant tout défilement de page (reprise 180 ms). */
     let scrolling = false;
     let scrollTimer = 0;
@@ -207,11 +182,7 @@ export function LogoMarquee() {
     };
   }, [ready]);
 
-  const setPaused = (index: number, value: boolean) => {
-    engine.current.paused[index] = value;
-  };
-
-  /* Logo (ou repli typographique si l'image a échoué) — jamais d'icône cassée. */
+  /* Logo (ou repli typographique si l'image a échouée) — jamais d'icône cassée. */
   const renderBrand = (b: Brand, hidden: boolean) =>
     failedSlugs.has(b.slug) ? (
       <span className={styles.logoText} title={hidden ? undefined : b.name}>
@@ -231,80 +202,49 @@ export function LogoMarquee() {
       />
     );
 
+  const seq: Brand[] = Array.from({ length: REPEATS_PER_HALF }, () => BRANDS).flat();
+
   return (
     <div ref={wrapRef} className={styles.section} data-testid="logo-marquee">
-      <div className={styles.shell}>
+      {/* Modèle Task 43 : bande plate sur blanc pur — overflow coupé ici, aucune
+          coque, aucune bordure, aucun fondu latéral (les logos vont jusqu'au bord). */}
+      <div
+        className={styles.band}
+        role="presentation"
+        onPointerEnter={() => {
+          if (hoverFineRef.current) engine.current.paused = true;
+        }}
+        onPointerLeave={() => {
+          if (hoverFineRef.current) engine.current.paused = false;
+        }}
+        onPointerCancel={() => {
+          if (hoverFineRef.current) engine.current.paused = false;
+        }}
+      >
         {!ready ? (
-          /* Espace réservé serveur : même géométrie que les deux bandes (aucun CLS),
+          /* Espace réservé serveur : même géométrie que la bande réelle (aucun CLS),
              aucun contenu marquable par l'outillage de prévisualisation. */
-          <div aria-hidden="true">
-            <div className={styles.phBar} />
-            <div className={styles.divider} />
-            <div className={styles.phBar} />
-          </div>
+          <div aria-hidden="true" className={styles.phBar} />
         ) : (
           /* Task 41 : animation INCONDITIONNELLE — plus aucune porte prefers-reduced-motion. */
-          BANDS.map((band, i) => (
-            <Fragment key={i}>
-              {i > 0 && <div className={styles.divider} aria-hidden="true" />}
-              <div
-                className={styles.band}
-                role="presentation"
-                onPointerEnter={() => {
-                  if (hoverFineRef.current) setPaused(i, true);
-                }}
-                onPointerLeave={() => {
-                  if (hoverFineRef.current) setPaused(i, false);
-                }}
-                onPointerCancel={() => {
-                  if (hoverFineRef.current) setPaused(i, false);
-                }}
-              >
-                <div
-                  ref={(el) => { trackRefs.current[i] = el; }}
-                  className={styles.track}
-                  data-testid={`marquee-track-${i}`}
-                >
-                  <MarqueeHalf
-                    brands={band.brands}
-                    halfRef={(el) => { firstHalfRefs.current[i] = el; }}
-                    renderBrand={renderBrand}
-                  />
-                  <MarqueeHalf brands={band.brands} hidden renderBrand={renderBrand} />
-                </div>
-              </div>
-            </Fragment>
-          ))
+          <div ref={trackRef} className={styles.track} data-testid="marquee-track-0">
+            <ul ref={firstHalfRef} className={styles.half}>
+              {seq.map((b, i) => (
+                <li key={`${b.slug}-${i}`} className={styles.item}>
+                  {renderBrand(b, false)}
+                </li>
+              ))}
+            </ul>
+            <ul className={styles.half} aria-hidden="true">
+              {seq.map((b, i) => (
+                <li key={`${b.slug}-${i}`} className={styles.item}>
+                  {renderBrand(b, true)}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
-        {/* Fondus latéraux : petits calques STATIQUES (jamais un mask sur la piste —
-            Task 35-bis), ils suggèrent l'arrivée d'autres partenaires. */}
-        <span className={`${styles.fade} ${styles.fadeLeft}`} aria-hidden="true" />
-        <span className={`${styles.fade} ${styles.fadeRight}`} aria-hidden="true" />
       </div>
     </div>
-  );
-}
-
-/** Moitié de piste animée : séquence répétée (créneaux à largeur fixe → zéro CLS). */
-function MarqueeHalf({
-  brands,
-  hidden,
-  halfRef,
-  renderBrand,
-}: {
-  brands: Brand[];
-  hidden?: boolean;
-  halfRef?: (el: HTMLUListElement | null) => void;
-  renderBrand: (b: Brand, hidden: boolean) => React.ReactNode;
-}) {
-  const seq: Brand[] = Array.from({ length: REPEATS_PER_HALF }, () => brands).flat();
-  return (
-    <ul ref={halfRef} className={styles.half} aria-hidden={hidden ? "true" : undefined}>
-      {seq.map((b, i) => (
-        <li key={`${b.slug}-${i}`} className={styles.item}>
-          {renderBrand(b, hidden === true)}
-        </li>
-      ))}
-    </ul>
   );
 }
