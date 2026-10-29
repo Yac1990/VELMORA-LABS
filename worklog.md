@@ -934,3 +934,24 @@ Stage Summary:
 - La bande de logos reproduit fidèlement le modèle fourni : une seule rangée plate sur blanc pur, logos en gris monochrome adouci (couleur d'origine restaurée au survol desktop), espacement généreux et régulier, aucun cadre/fondu — et elle DÉFILE en permanence (moteur rAF inconditionnel, REDUCE inclus, mesuré −80 px/1,3 s), avec pause au survol (WCAG) et repli typographique sur échec d'image.
 - Les 17 plateformes affichées restent celles réellement intégrées au catalogue (honnêteté des données) — le modèle définit le style, pas les marques.
 - Restant : déploiement Vercel en attente d'un nouveau jeton (whoami → Logged out).
+
+---
+Task ID: 43-v2
+Agent: orchestrateur (affinage bande de logos — retour couleur, resserrée, bien visible)
+Task: « regarde bien la capture il n'y a pas de contour, les logos doivent défiler dans le vide et rassure-toi que les logos soient en couleur et réduis la distance entre les logos, bien visible » (nouvelle capture du modèle joint).
+
+Work Log:
+- Lecture de la consigne : la v1 (gris monochrome, copie fidèle du modèle) ne plaît pas — le propriétaire précise 3 exigences : logos EN COULEUR, distance ENTRE LOGOS réduite, bande BIEN VISIBLE ; le reste du modèle (aucun contour, logos défilant dans le vide sur blanc, coupés aux bords) est confirmé par la capture.
+- Constat disque : les 17 PNG /brands/*.png sont DÉJÀ en couleur d'origine (Jumia orange, ClickBank bleu, Amazon orange…) — le rendu gris venait uniquement du CSS v1 (filter grayscale(1) + opacity .55).
+- logo-marquee.module.css : suppression TOTALE du filtre grayscale et de l'opacité réduite → logos affichés tels quels (couleur pleine, opacité 1) ; créneaux resserrés 200→160 px desktop, 176→132 px tablette, 136→108 px mobile (consigne « réduis la distance ») ; logos AGRANDIS 32→34 px desktop, 28→30 px tablette, 24→26 px mobile (« bien visible ») ; .phBar aligné sur les nouvelles hauteurs (zéro CLS) ; survol pointeur fin réduit au zoom 1,05 (la couleur est désormais permanente) ; repli typographique légèrement assombri #8a90a0 ; bande TOUJOURS plate (0 bordure visible — reset Tailwind border-style solid @0px, 0 rayon, 0 ombre, fond #fff).
+- logo-marquee.tsx : commentaires mis à jour (Task 43 v2, source des consignes) ; moteur rAF Task 41 STRICTEMENT inchangé (offset modulo demi-largeur, dt borné, IntersectionObserver, pause onglet/défilement, ANIMATION INCONDITIONNELLE sans porte prefers-reduced-motion, pause survol pointeurs fins, hydratation useSyncExternalStore, repli par slug) ; vitesse recalculée : demi-largeur 34×160=5 440 px ÷ 110 s ≈ 49 px/s (défilement lent et bien visible).
+- QA (qa-logo-43.mjs, 3 contextes Playwright) : 14/14 PASS — Desktop 1366 : bande sans bordure visible (4×0px), sans rayon ni ombre, section fond blanc pur, créneau mesuré 160 px, logo filter:none + opacity:1 + hauteur 34 px, piste EN DÉFILEMENT (transform évolue), analyse PIXELS par canvas : 3 687 pixels saturés (>Δ40) → logos réellement EN COULEUR ; REDUCE : défilement MAINTENU (inconditionnel Task 41) ; Mobile 390 : créneau 108 px, 0 px de débordement, défilement actif, filter none. (1re exécution 13/14 : assertion bordure trop stricte — le reset Tailwind met border-style:solid avec largeur 0, donc AUCUNE bordure visible ; assertion corrigée sur la largeur.)
+- Captures lues et validées : qa43-band.png / qa43-mobile.png / qa43-desktop.png — logos colorés (Amazon orange, Rakuten rouge, ShareASale vert, ebay multicolore, Jumia orange), rangée dense (9 logos visibles sur 1366 px), coupés aux bords, aucun cadre.
+- Agent Browser (vérification finale live) : bordureVisible 4×0px, ombre none, fond rgb(255,255,255), filtreLogo none, opacité 1, hauteur 34 px, créneau 160 px, 68 <img> ; défilement confirmé en temps réel (transform −746,9 → −808,7 px sur 1,2 s) ; capture qa43-agent-live.png (ClickBank, ebay, Jumia, Kwanko, Rakuten, admitad, TradeDoubler tous en couleur) ; 0 erreur console, 0 erreur page.
+- Statiques : bun run lint 0/0 ; bunx tsc --noEmit 0 erreur projet (la seule remontée est mini-services/chat-service, préexistante, hors périmètre). dev.log : 200 uniquement.
+- Déploiement : toujours BLOQUÉ (jeton Vercel révoqué) — Tasks 39→43 v2 prêtes à déployer dès nouveau jeton.
+
+Stage Summary:
+- La bande de logos est passée du gris monochrome (v1) à la COULEUR PLEINE : les 17 plateformes affichent leurs logos d'origine, sans aucun filtre, agrandis (26/30/34 px) et resserrés (108/132/160 px) — rangée dense et bien visible, exactement comme demandé.
+- Aucun contour, aucune ombre, aucun fondu : les logos défilent « dans le vide » sur le blanc du pied de page, coupés aux bords comme le modèle — et le défilement reste INCONDITIONNEL (moteur rAF Task 41, confirmé en live et sous prefers-reduced-motion:reduce).
+- Restant : déploiement Vercel en attente d'un nouveau jeton (whoami → Logged out).

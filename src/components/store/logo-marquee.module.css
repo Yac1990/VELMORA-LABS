@@ -1,23 +1,24 @@
-/* ── Task 43 : bande de logos « modèle propriétaire » (styles isolés via CSS Modules) ──
+/* ── Task 43 v2 : bande de logos « modèle propriétaire » — RETOUR COULEUR (styles isolés via CSS Modules) ──
    Portée stricte : aucune classe globale, aucun effet hors du composant LogoMarquee.
 
-   Reproduction fidèle du modèle fourni (capture d'écran) :
-   - UNE SEULE rangée, fond BLANC PUR : plus de coque bleutée, plus d'arrondis,
-     plus de bordure, plus d'ombre, plus de filet dégradé, plus de fondus latéraux
-     (dans le modèle, les logos vont jusqu'au bord, même coupés).
-   - Logos en GRIS MONOCHROME : filter: grayscale(1) + opacité réduite — rendu
-     identique au modèle ; au survol (desktop à pointeur fin uniquement) retour
-     progressif de la couleur d'origine.
-   - Aucun filter/transform/mask sur la PISTE animée (règle Task 35-bis : corruption
-     GPU Android sur les grands calques) — le filtre grayscale ne s'applique qu'aux
-     petites <img> individuelles.
-   - Aucun `will-change`, aucun mask, aucun backdrop-filter.
-   - Mouvement piloté par le moteur rAF du composant (translate3d) : aucune
-     animation/keyframes CSS ici.
-   - Task 41 (inchangée) : plus AUCUN mode statique — l'animation est inconditionnelle
-     (décision propriétaire, 4 signalements « logos statiques »). */
+   Consigne propriétaire (Task 43 v2, après la v1 monochrome) :
+   - « il n'y a pas de contour, les logos doivent défiler dans le vide » → bande TOUJOURS
+     plate sur blanc pur : aucune coque, aucun arrondi, aucune bordure, aucune ombre,
+     aucun filet, aucun fondu latéral (les logos vont jusqu'au bord, même coupés).
+   - « rassure-toi que les logos soient en couleur » → PLUS AUCUN grayscale, PLUS AUCUNE
+     opacité réduite : les PNG d'origine (déjà colorés sur disque) s'affichent tels quels,
+     opacité pleine — bande vivante et lisible.
+   - « réduis la distance entre les logos, bien visible » → créneaux resserrés
+     (108 / 132 / 160 px au lieu de 136 / 176 / 200 px) ET logos légèrement agrandis
+     (26 / 30 / 34 px de haut) : rangée dense, lisible, sans surcharger.
 
-/* Section : respiration verticale autour de la bande (position inchangée). */
+   Aucun filter/transform/mask sur la PISTE animée (règle Task 35-bis : corruption GPU
+   Android sur les grands calques). Aucun `will-change`, aucun mask, aucun backdrop-filter.
+   Mouvement piloté par le moteur rAF du composant (translate3d) : aucune animation CSS ici.
+   Task 41 (inchangée, non négociable) : plus AUCUN mode statique — l'animation est
+   INCONDITIONNELLE (décision propriétaire, 4 signalements « logos statiques »). */
+
+/* Section : respiration verticale autour de la bande (position inchangée, blanc du footer). */
 .section {
   padding: 1.25rem 0;
   background: #ffffff;
@@ -28,7 +29,7 @@
   }
 }
 
-/* Bande plate : coupure du débordement uniquement — zéro décoration. */
+/* Bande plate : coupure du débordement uniquement — zéro décoration, zéro contour. */
 .band {
   position: relative;
   overflow: hidden;
@@ -58,67 +59,63 @@
 
 /* Créneau LOGO À LARGEUR FIXE : la piste a sa largeur définitive dès le premier rendu,
    AVANT même le chargement des images — zéro décalage de mise en page (CLS).
-   Espacement généreux et régulier, comme le modèle (~200 px entre logos). */
+   Task 43 v2 : distance RÉDUITE entre logos (consigne propriétaire). */
 .item {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 8.5rem; /* 136 px — mobile */
+  width: 6.75rem; /* 108 px — mobile */
   padding: 0;
 }
 @media (min-width: 640px) {
   .item {
-    width: 11rem; /* 176 px — tablette */
+    width: 8.25rem; /* 132 px — tablette */
   }
 }
 @media (min-width: 1024px) {
   .item {
-    width: 12.5rem; /* 200 px — desktop */
+    width: 10rem; /* 160 px — desktop (au lieu de 200 px : rangée dense) */
   }
 }
 
-/* Logos : GRIS MONOCHROME comme le modèle (filter sur la petite image uniquement),
-   proportions préservées (object-fit: contain), jamais déformés. */
+/* Logos en COULEUR (consigne propriétaire Task 43 v2) : aucun filtre, opacité pleine,
+   proportions préservées (object-fit: contain), jamais déformés — et agrandis pour
+   être BIEN VISIBLES. */
 .logo {
   display: block;
-  height: 1.5rem; /* 24 px — mobile */
+  height: 1.625rem; /* 26 px — mobile */
   width: auto;
-  max-width: 6rem;
+  max-width: 5.5rem;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
-  filter: grayscale(1);
-  opacity: 0.55;
-  transition: opacity 0.25s ease, filter 0.25s ease, transform 0.25s ease;
 }
 @media (min-width: 640px) {
   .logo {
-    height: 1.75rem; /* 28 px */
-    max-width: 7.5rem;
+    height: 1.875rem; /* 30 px */
+    max-width: 6.75rem;
   }
 }
 @media (min-width: 1024px) {
   .logo {
-    height: 2rem; /* 32 px — taille confortable */
-    max-width: 8.5rem;
+    height: 2.125rem; /* 34 px — desktop, très lisible */
+    max-width: 8rem;
   }
 }
 
-/* Survol : desktop uniquement (jamais déclenché au toucher) — retour de la couleur
-   d'origine, opacité pleine, zoom léger 5 % ; la bande est suspendue par le moteur. */
+/* Survol : desktop uniquement (jamais déclenché au toucher) — zoom léger 5 % ; la
+   couleur est désormais PERMANENTE (Task 43 v2), seul le zoom reste en feedback. */
 @media (hover: hover) and (pointer: fine) {
   .item:hover .logo,
   .item:focus-within .logo {
-    filter: grayscale(0);
-    opacity: 1;
     transform: scale(1.05);
   }
 }
 
 /* Repli typographique (échec de chargement d'une image) : mot-symbole gris sobre au
-   nom EXACT de la plateforme — même style monochrome que le modèle, sans pilule ni
-   bordure (design plat), jamais d'icône cassée ni de `undefined`. */
+   nom EXACT de la plateforme, sans pilule ni bordure (design plat), jamais d'icône
+   cassée ni de `undefined`. */
 .logoText {
   display: inline-flex;
   align-items: center;
@@ -126,7 +123,7 @@
   font-size: 0.9375rem;
   font-weight: 700;
   letter-spacing: 0.01em;
-  color: #a9aeb8;
+  color: #8a90a0;
   user-select: none;
 }
 @media (min-width: 640px) {
@@ -138,15 +135,15 @@
 /* Espace réservé serveur : hauteur du logo seul (le padding vertical est porté par
    .band) — géométrie identique à la bande réelle, zéro CLS au montage. */
 .phBar {
-  height: 1.5rem;
+  height: 1.625rem;
 }
 @media (min-width: 640px) {
   .phBar {
-    height: 1.75rem;
+    height: 1.875rem;
   }
 }
 @media (min-width: 1024px) {
   .phBar {
-    height: 2rem;
+    height: 2.125rem;
   }
 }

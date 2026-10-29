@@ -2,14 +2,16 @@
  * Task 19 → 21 → 40 → 41 → 43 — bande de logos défilante du pied de page
  * (entre « Comment ça marche ? » et les colonnes de liens — position inchangée).
  *
- * Task 43 — REPRODUCTION FIDÈLE DU MODÈLE fourni par le propriétaire (capture
- * d'écran d'une bande « plateformes ») : UNE SEULE rangée, fond blanc PUR (plus
- * de coque bleutée, plus d'arrondis, plus de bordure, plus d'ombre, plus de filet
- * dégradé, plus de fondus latéraux — les logos du modèle sont coupés aux bords),
- * logos en GRIS MONOCHROME (filtre grayscale + opacité réduite, comme le modèle)
- * qui retrouvent leurs couleurs au survol (desktop à pointeur fin), espacement
- * généreux et régulier. Les 17 plateformes RÉELLEMENT intégrées restent affichées
- * (honnêteté des données : le modèle illustre le STYLE, pas les marques).
+ * Task 43 v2 — AFFINAGE PROPRIÉTAIRE après la v1 monochrome (« le design actuel
+ * des logos qui défilent ne plaît pas ») : la capture du modèle confirme UNE SEULE
+ * rangée plate SANS CONTOUR, logos défilant DANS LE VIDE (aucune coque, aucune
+ * bordure, aucun fondu — coupés aux bords) ; consignes explicites reprises :
+ * 1) « rassure-toi que les logos soient en couleur » → suppression TOTALE du
+ *    grayscale et de l'opacité réduite : PNG d'origine colorés, opacité pleine ;
+ * 2) « réduis la distance entre les logos » → créneaux resserrés 108/132/160 px ;
+ * 3) « bien visible » → logos agrandis (26/30/34 px de haut).
+ * Les 17 plateformes RÉELLEMENT intégrées restent affichées (honnêteté des
+ * données : le modèle illustre le STYLE, pas les marques).
  *
  * Task 41 (inchangé, non négociable) — ANIMATION INCONDITIONNELLE : 4 signalements
  * « LES LOGO SONT TOUJOURS STATIQUE » ont prouvé que le panneau de prévisualisation
@@ -37,7 +39,8 @@ import styles from "./logo-marquee.module.css";
 type Brand = { slug: string; name: string };
 
 /* Les 17 plateformes réellement intégrées, dans une seule séquence (modèle Task 43 :
-   une seule rangée). Chaque slug correspond à un fichier /brands/<slug>.png VÉRIFIÉ. */
+   une seule rangée). Chaque slug correspond à un fichier /brands/<slug>.png VÉRIFIÉ
+   (PNG couleur d'origine — affichés SANS filtre depuis la v2). */
 const BRANDS: Brand[] = [
   { slug: "amazon-associates", name: "Amazon Associates" },
   { slug: "awin", name: "Awin" },
@@ -58,12 +61,13 @@ const BRANDS: Brand[] = [
   { slug: "digistore24", name: "Digistore24" },
 ];
 
-/** Répétitions de la séquence par moitié : 17 créneaux × 200 px = 3 400 px ≥ la
-    quasi-totalité des écrans ; ×2 couvre les ultra-larges (boucle sans aucun trou). */
+/** Répétitions de la séquence par moitié : 17 créneaux × 160 px = 2 720 px par
+    séquence ; ×2 = 5 440 px ≥ écrans ultra-larges (boucle sans aucun trou). */
 const REPEATS_PER_HALF = 2;
 
-/* Durée (secondes) pour parcourir exactement une moitié : ≈ 30 px/s comme avant
-   (17 × 200 px ÷ 110 s ≈ 31 px/s) — défilement lent et élégant, sens standard. */
+/* Durée (secondes) pour parcourir exactement une moitié : moitié = 34 × 160 px =
+   5 440 px ÷ 110 s ≈ 49 px/s — défilement lent, régulier et BIEN VISIBLE, sens
+   standard gauche → droite. */
 const DIRECTION = "left" as const;
 const DURATION_S = 110;
 
