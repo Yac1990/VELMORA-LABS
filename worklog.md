@@ -1084,3 +1084,20 @@ Stage Summary:
 - La boutique publique est 100 % opérationnelle (catalogue réel servi par Supabase). Reste UNE action bloquée sur
   une information manquante : la rotation du mot de passe owner CÔTÉ SUPABASE (connexion admin) — dès réception des
   URLs de connexion Supabase, la procédure documentée prend 2 minutes.
+
+Task ID: 46-b
+Agent: Z.ai Code (orchestrator)
+Task: Synchronisation GitHub sécurisée du dépôt (jeton repo fourni par l'éditeur) — GitHub resté 23 commits en retard (Task 29) depuis les déploiements Vercel par CLI ; purge préalable de l'historique exigée par DEPLOIEMENT.md (dumps SQL commités en Task 30/31).
+
+Work Log:
+- Jeton vérifié via api.github.com/user → login Yac1990, scope repo ; fetch origin/main → 03d288c (Task 29), avance locale 23/0.
+- Audit de la plage 03d288c..HEAD : Task 30 (8b67f76) avait commité supabase-import.sql (554 lignes, schéma + données réelles dont le hash du mot de passe owner) et Task 31 (faff1ec) l'avait copié en public/demo/velmora-install.sql ; Task 45 (b3dc221) les avait retirés du HEAD mais les blobs seraient restés dans l'historique poussé → violation de la règle « filter-repo avant tout nouveau push ».
+- Purge exécutée : git filter-branch --index-filter (rm --cached des 2 chemins) --prune-empty sur 03d288c..main → commit Task 31 élagué (vide après filtre), arbres finaux STRICTEMENT identiques (git diff vs branche backup-pre-filter = vide), 0 blob des 2 dumps dans la plage, git grep 'INSERT INTO "Profile"' sur TOUS les arbres de main = 0 occurrence. Nouveaux hashes : Task 44 → 490c1e5, Task 45 → 5c5114e, Task 46 → c7ca40f (les messages citant les anciens hashes b3dc221/3781cd7 restent valables comme identifiants de contenu).
+- Entrée worklog + commit, puis push main → GitHub en fast-forward (sans force) ; auto-déploiement Vercel (intégration Git, branche main) déclenché et confirmé READY ; remote et local alignés.
+- prisma/migrations_reference.sql contrôlé (ajouté dans la plage) : DDL uniquement, aucune donnée profil.
+- Sécurité : jeton GitHub utilisé uniquement en variable de shell/URL one-shot push, jamais écrit dans un fichier suivi ni dans .git/config ; branche locale backup-pre-filter conservée hors remote.
+
+Stage Summary:
+- GitHub Yac1990/VELMORA-LABS = local main = production Vercel (Task 46), historique publié garanti sans dump SQL ni hash de mot de passe.
+- Reste UNE action bloquée sur une information manquante : rotation du mot de passe owner CÔTÉ SUPABASE (login admin 401 en production) — dès réception des chaînes de connexion Supabase (pooler 6543 + direct 5432) ou d'un PAT sbp_, l'UPDATE préparé (/tmp/fix-owner-prod.sql) prend 2 minutes.
+- Rappel sécurité : révoquer le jeton GitHub et le jeton Vercel (tous deux apparus dans la conversation) une fois les opérations terminées.
