@@ -1101,3 +1101,19 @@ Stage Summary:
 - GitHub Yac1990/VELMORA-LABS = local main = production Vercel (Task 46), historique publié garanti sans dump SQL ni hash de mot de passe.
 - Reste UNE action bloquée sur une information manquante : rotation du mot de passe owner CÔTÉ SUPABASE (login admin 401 en production) — dès réception des chaînes de connexion Supabase (pooler 6543 + direct 5432) ou d'un PAT sbp_, l'UPDATE préparé (/tmp/fix-owner-prod.sql) prend 2 minutes.
 - Rappel sécurité : révoquer le jeton GitHub et le jeton Vercel (tous deux apparus dans la conversation) une fois les opérations terminées.
+
+Task ID: 46-c
+Agent: Z.ai Code (orchestrator)
+Task: Rotation du mot de passe owner CÔTÉ SUPABASE production (PAT sbp_ fourni par l'éditeur) — débloque le login admin en production, dernière action restante du déploiement.
+
+Work Log:
+- PAT vérifié via api.supabase.com/v1/projects → projet unique VELMORA-LABS (réf wbjyuebbwnfzlqxxnowb, eu-west-1, ACTIVE_HEALTHY).
+- État avant intervention : hash 161 chars, updatedAt 2026-10-24 10:41:35 — le changement personnel de l'éditeur, jamais transféré lors de la restauration Task 45 (rotation appliquée en local uniquement).
+- Hash frais généré par le hashPassword scrypt du projet lui-même (aucun hash journalisé ni commité) → UPDATE « Profile » via l'endpoint database/query du Management API (rôle admin, RETURNING) → 1 ligne mise à jour, updatedAt 2026-10-30 12:16:07, SELECT de contrôle conforme.
+- Vérifications live : POST /api/auth/login (nouveau mot de passe) → 200 + token ; /api/auth/me → identité owner complète (role owner, « Administrateur propriétaire ») ; mauvais mot de passe → 401.
+- LIMITE DE SÉCURITÉ DÉCOUVERTE (honnêteté) : /api/auth/logout ne fait que vider le cookie — le jeton signé HMAC reste VALIDE jusqu'à exp (TTL 8 h, design stateless sans registre serveur) ; un /api/auth/me avec X-Session-Token renvoie 200 {user:null} par design sans session (piège de test : le 200 n'indique PAS une session vivante — vérifier le corps). Le jeton de test a néanmoins continué de résoudre l'identité après logout. Atténuation existante : RBAC relit role/isActive en base (cache 30 s, Task 45) → désactiver le compte coupe l'accès ≤ 30 s ; le jeton de test n'a jamais quitté le sandbox (fichiers /tmp supprimés). Correctif propre = denylist DB au logout (table RevokedToken + vérification dans sessionFromRequest) → planifié Task 47, volontairement PAS de hot-fix à chaud sur le cœur auth en fin de marathon de déploiement.
+- velmora-labs.vercel.app : boutique ET back-office 100 % opérationnels.
+- Sécurité : jetons Vercel, GitHub et Supabase apparus dans la conversation → révocation recommandée ; le mot de passe owner documenté reste un secret de session — à re-changer à la première connexion (vue Utilisateurs, œil afficher/masquer).
+
+Stage Summary:
+- VELMORA LABS EN PRODUCTION COMPLÈTE : Tasks 39→46 en ligne (upload médias, i18n FR/EN, marquee logos couleur, durcissement Task 45), GitHub = local = Vercel (bb0d4b4), admin owner opérationnel, données réelles uniquement.

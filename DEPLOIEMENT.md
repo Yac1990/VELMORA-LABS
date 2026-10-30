@@ -151,10 +151,11 @@ git push -u origin main
    publiquement** sous `/demo/velmora-install.sql`. Le mot de passe owner a été
    **rotaté** (l'ancien hachage est invalide). `.gitignore` interdormit désormais
    tout `*.sql` à la racine et sous `public/`.
-   ⚠️ **GitHub (`Yac1990/VELMORA-LABS`) contient encore ces fichiers dans
-   l'historique** : supprimer le dépôt et re-pousser l'historique nettoyé, ou
-   réécrire l'historique (`git filter-repo --path public/demo/velmora-install.sql
-   --path supabase-import.sql --invert-paths`) avant tout nouveau push.
+   ⚠️ → ✅ **Résolu le 30/10 (Task 46-b)** : l'historique a été purgé par
+   `git filter-branch --index-filter` sur la plage concernée AVANT le push GitHub
+   (0 blob des deux dumps vérifié, `git grep 'INSERT INTO "Profile"'` sur tous les
+   arbres = 0 occurrence, arbres finaux inchangés). Aucun hachage de mot de passe
+   n'est présent dans l'historique publié.
 2. **Secret de signature** : plus aucun repli en production (fail-fast).
 3. **RBAC** : relecture rôle/état actif en base (cache 30 s) à chaque route admin.
 4. **Limites de débit** : IP client issue de `x-real-ip` (proxy de confiance) ou du
@@ -162,6 +163,11 @@ git push -u origin main
    plus les limites.
 5. **Exports CSV** : neutralisation des formules (`= + - @` → apostrophe initiale).
 6. **Uploads** : octets magiques vérifiés (MIME falsifié rejeté), SVG/HEIC refusés.
+7. **Sessions stateless (limite connue, Task 47)** : les jetons sont signés HMAC
+   avec un TTL de 8 h ; `logout` vide le cookie mais NE RÉVOQUE PAS le jeton
+   côté serveur — un jeton volé reste utilisable jusqu'à expiration. Atténuation :
+   le RBAC relit rôle/état actif en base (≤ 30 s) — désactiver un compte coupe
+   son accès immédiatement. Correctif propre planifié : denylist DB au logout.
 
 ## Dépannage rapide
 
