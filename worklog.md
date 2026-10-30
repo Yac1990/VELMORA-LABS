@@ -1042,3 +1042,45 @@ Stage Summary:
 - Toutes les fonctionnalités ont été revues en conditions réelles (navigateur, mobile + desktop) : boutique, fiche produit,
   bascule FR/EN, admin, téléversement 1-5 images, défilement des logos — zéro erreur console, zéro image cassée.
 - Restant unique : le déploiement Vercel attend le jeton (et les URLs Supabase) — tout le reste est prêt pour la production.
+
+---
+Task ID: 46
+Agent: orchestrateur (déploiement production Vercel — jeton reçu)
+Task: « voila le lien vercel » (jeton d'accès fourni) — mise en production immédiate.
+
+Work Log:
+- JETON : le jeton fourni est scopé ÉQUIPE (« ancekay », team_NXk1BJyQ90qiVfpiFsKERE6r) — `vercel whoami` échoue
+  (« User not found ») mais l'API REST accepte le jeton sur les ressources du projet. Projet existant trouvé :
+  velmora-labs (prj_6i8F6yAHtEs1CO3EJXKzAcRMoEd6), lien GitHub Yac1990/VELMORA-LABS (auto-déploiement main), plan Hobby.
+- ÉTAT CONSTATÉ : variables déjà présentes sur le projet (chiffrées, cibles prod+preview+dev) : DATABASE_URL, DIRECT_URL,
+  AUTH_SECRET — le dernier déploiement production datait du commit 918a421 (Task 37/38) : les Tasks 39→45 n'étaient pas en ligne.
+- CONFIGURATION AJOUTÉE via API REST : SECURITY_FRAME_ANCESTORS=''self'' (201), SECURITY_HSTS=true (201),
+  région des fonctions → cdg1 Paris (PATCH 200, latence base supposée Europe). Fichier .vercel/project.json créé
+  manuellement (orgId=team, projectId) pour contourner l'échec whoami du CLI sur jeton d'équipe (gitignoré).
+- DÉPLOIEMENT : `npx vercel --prod --yes --token …` depuis le répertoire projet → Build 35 s, Ready 1 min,
+  aliasé https://velmora-labs.vercel.app (déploiement velmora-labs-jq2he0c8p-ancekay.vercel.app).
+- VÉRIFICATIONS POST-DÉPLOIEMENT (Étape 7 DEPLOIEMENT.md) :
+  ✓ En-têtes de sécurité : CSP complète, HSTS max-age=63072000 includeSubDomains, X-Frame-Options SAMEORIGIN,
+    nosniff, Referrer-Policy, x-request-id (proxy Edge Task 27)
+  ✓ Base accessible : /api/public/catalog renvoie le catalogue réel (MyShedPlans…)
+  ✓ Admin protégé : /api/admin/products sans session → 401 (fail-fast AUTH_SECRET opérationnel en prod)
+  ✓ /api/go/inexistant → 404 (offre cherchée en base, allowlist domaine active)
+  ✓ FUITE SQL PURGÉE : /demo/velmora-install.sql → 404 en production (le dump n'est plus servi)
+  ✓ Page HTML : titre « VELMORA LABS — Découvrez plus. Choisissez mieux. »
+  ✗ CONNEXION OWNER EN PROD → « Identifiants invalides ou compte désactivé » : ATTENDU — la production lit la base
+    SUPABASE (DATABASE_URL/DIRECT_URL chiffrés côté Vercel, illisibles via API), dont le profil owner porte encore
+    l'ANCIEN hachage de mot de passe (celui qui a fui dans le dump GitHub). La rotation effectuée en local (Task 45)
+    ne peut pas être répliquée sur Supabase sans la chaîne de connexion directe. Demande envoyée : deux URLs Supabase
+    (pooler 6543 + direct 5432) ou réinitialisation du mot de passe base (Supabase → Settings → Database → Reset
+    database password) → puis `DATABASE_URL=<direct> OWNER_EMAIL=cedrickonan44@gmail.com OWNER_PASSWORD=<nouveau>
+    bun scripts/set-owner-credentials.ts` (procédure Étape 3 DEPLOIEMENT.md) → connexion admin opérationnelle.
+- SÉCURITÉ : le jeton Vercel n'a été utilisé qu'en variable de shell (--token), jamais écrit dans un fichier suivi ;
+  .vercel/ reste gitigné.
+
+Stage Summary:
+- https://velmora-labs.vercel.app est EN PRODUCTION avec les Tasks 39→45 : upload 1-5 images, i18n EN complet,
+  logos couleur qui défilent, durcissement sécurité Task 45 (RBAC relecture, fail-fast secret, octets magiques,
+  CSV anti-formule), en-têtes HSTS + anti-framing actifs, région Paris.
+- La boutique publique est 100 % opérationnelle (catalogue réel servi par Supabase). Reste UNE action bloquée sur
+  une information manquante : la rotation du mot de passe owner CÔTÉ SUPABASE (connexion admin) — dès réception des
+  URLs de connexion Supabase, la procédure documentée prend 2 minutes.
