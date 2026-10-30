@@ -59,3 +59,7 @@ server.log
 !/dev/null
 /db/
 /backups/
+
+# dumps SQL — JAMAIS dans le dépôt ni dans public/ (fuite historique corrigée Task 45)
+/public/**/*.sql
+/*.sql

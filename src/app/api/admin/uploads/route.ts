@@ -4,7 +4,8 @@
  * Task 44 : depuis le formulaire produit, l'admin clique « Téléverser 1 à 5 images » et
  * choisit 1 à 5 fichiers d'un coup. Contraintes serveur (redondantes avec le client) :
  *  - 1 à 5 fichiers par requête ;
- *  - images uniquement : JPEG, PNG, WebP, AVIF, GIF (validation par type MIME) ;
+ *  - images uniquement : JPEG, PNG, WebP, AVIF, GIF — MIME déclaré ET octets
+ *    magiques vérifiés (Task 45) ;
  *  - 5 Mo maximum par fichier ;
  *  - permission RBAC catalog.write (gardée côté serveur, en dernier recours) ;
  *  - audit « media.upload » horodaté.
@@ -32,6 +33,25 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/avif": "avif",
   "image/gif": "gif",
 };
+
+/**
+ * Task 45 — détection des octets magiques : le type MIME déclaré par le client
+ * (file.type) n'est pas une preuve — un fichier HTML/PHP renommé .jpg arrive avec
+ * un MIME falsifié. On rejette tout fichier dont le contenu réel ne correspond
+ * pas au type annoncé. SVG volontairement absent (XSS stockée), HEIC refusé.
+ */
+function sniffImageExt(buf: Buffer): string | null {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpg"; // JPEG
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "png"; // PNG
+  if (buf.toString("latin1", 0, 4) === "GIF8") return "gif"; // GIF87a/89a
+  if (buf.toString("latin1", 0, 4) === "RIFF" && buf.toString("latin1", 8, 12) === "WEBP") return "webp";
+  if (buf.toString("latin1", 4, 8) === "ftyp") {
+    const brand = buf.toString("latin1", 8, 12);
+    if (brand.startsWith("avif") || brand.startsWith("avis")) return "avif";
+  }
+  return null;
+}
 
 export async function POST(req: NextRequest) {
   const guard = await requirePermission(req, "catalog.write");
@@ -66,6 +86,13 @@ export async function POST(req: NextRequest) {
     }
     const name = `${Date.now().toString(36)}-${randomBytes(6).toString("hex")}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
+    // Task 45 : le contenu doit réellement être l'image annoncée (octets magiques).
+    if (sniffImageExt(buffer) !== ext) {
+      return err(
+        `« ${file.name} » n'est pas une image ${file.type} valide (contenu refusé).`,
+        415
+      );
+    }
     await writeFile(path.join(dir, name), buffer);
     urls.push(`/uploads/${name}`);
   }

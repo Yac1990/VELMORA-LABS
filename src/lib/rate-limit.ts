@@ -23,10 +23,24 @@ export function checkRateLimit(key: string, limit: number, windowMs: number): { 
   return { allowed: true, retryAfterSec: 0 };
 }
 
+/**
+ * Task 45 — extraction d'IP anti-usurpation :
+ * 1. `x-real-ip` : posé par le proxy de confiance (Vercel / Caddy), non contrôlable
+ *    par le client — source prioritaire ;
+ * 2. sinon le DERNIER saut de `x-forwarded-for` : notre proxy ajoute l'IP réelle du
+ *    client en fin de chaîne — le premier saut (utilisé auparavant) est lui fourni
+ *    par le client lui-même et permettait de contourner les limites de débit en
+ *    forgeant un en-tête.
+ */
 export function getClientIp(req: Request): string {
+  const real = req.headers.get("x-real-ip");
+  if (real) return real.trim();
   const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return req.headers.get("x-real-ip") || "local";
+  if (fwd) {
+    const hops = fwd.split(",").map((h) => h.trim()).filter(Boolean);
+    if (hops.length > 0) return hops[hops.length - 1];
+  }
+  return "local";
 }
 
 // Nettoyage périodique pour éviter la croissance mémoire

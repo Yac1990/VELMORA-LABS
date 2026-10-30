@@ -131,10 +131,37 @@ git push -u origin main
   compte séparément (8 essais / 10 min par instance). Protection réelle mais répartie.
 - **AUTH_SECRET inliné au build** dans le proxy Edge : après rotation du secret,
   **redéployer** (un simple Redeploy suffit, les variables sont relues au build).
+  Depuis Task 45, **l'absence d'AUTH_SECRET en production est fatale** (repli dev
+  supprimé) : sans la variable, les routes admin répondent en erreur et le build
+  doit être refait après l'avoir définie.
+- **RBAC faisant autorité (Task 45)** : chaque route admin relit le rôle et l'état
+  actif du compte en base (cache 30 s). Désactiver ou rétrograder un utilisateur
+  dans Admin → Utilisateurs prend effet au plus tard 30 s après, sans attendre
+  l'expiration de son jeton (8 h).
 - **Supabase Free** : un projet sans activité est mis en pause après ~7 jours —
   le réactiver depuis le dashboard (les données sont conservées).
 - **IDs affiliés** : tant que `tracking.<slug>.affiliateId` n'est pas renseigné dans
   Réglages admin, `/api/go` redirige vers les vendeurs **sans tracking de commission**.
+
+## Sécurité — historique des mesures (Task 45, mise en production)
+
+1. **Dumps SQL purgés** : `public/demo/velmora-install.sql` et `supabase-import.sql`
+   (contenant le hachage du mot de passe owner, l'historique d'audit réel et les
+   gabarits de tracking) ont été retirés du projet — le premier était **téléchargeable
+   publiquement** sous `/demo/velmora-install.sql`. Le mot de passe owner a été
+   **rotaté** (l'ancien hachage est invalide). `.gitignore` interdormit désormais
+   tout `*.sql` à la racine et sous `public/`.
+   ⚠️ **GitHub (`Yac1990/VELMORA-LABS`) contient encore ces fichiers dans
+   l'historique** : supprimer le dépôt et re-pousser l'historique nettoyé, ou
+   réécrire l'historique (`git filter-repo --path public/demo/velmora-install.sql
+   --path supabase-import.sql --invert-paths`) avant tout nouveau push.
+2. **Secret de signature** : plus aucun repli en production (fail-fast).
+3. **RBAC** : relecture rôle/état actif en base (cache 30 s) à chaque route admin.
+4. **Limites de débit** : IP client issue de `x-real-ip` (proxy de confiance) ou du
+   dernier saut `X-Forwarded-For` — un en-tête forgé par le client ne contourne
+   plus les limites.
+5. **Exports CSV** : neutralisation des formules (`= + - @` → apostrophe initiale).
+6. **Uploads** : octets magiques vérifiés (MIME falsifié rejeté), SVG/HEIC refusés.
 
 ## Dépannage rapide
 

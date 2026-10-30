@@ -8,8 +8,22 @@ import { db } from "@/lib/db";
 export const SESSION_COOKIE = "vml_session";
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 8; // 8h
 
+/**
+ * Secret de signature — Task 45 (durcissement production) :
+ * en production, l'absence d'AUTH_SECRET est FATALE (throw) : le secret de repli
+ * « velmora-dev-secret-change-me » est public dans le dépôt, signer des sessions
+ * admin avec lui permettrait à quiconque possède les sources de forger un jeton
+ * owner. Le repli ne survit qu'en développement (NODE_ENV=development).
+ */
 function getSecret(): string {
-  return process.env.AUTH_SECRET || "velmora-dev-secret-change-me";
+  const secret = process.env.AUTH_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "AUTH_SECRET manquant en production — générez-le avec `openssl rand -hex 32` (cf. DEPLOIEMENT.md, Étape 5)."
+    );
+  }
+  return "velmora-dev-secret-change-me";
 }
 
 export function hashPassword(password: string): string {

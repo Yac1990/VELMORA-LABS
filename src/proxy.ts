@@ -47,8 +47,19 @@ interface SessionPayload {
   exp: number; // epoch ms
 }
 
+/**
+ * Secret de signature — Task 45 : en production, l'absence d'AUTH_SECRET est fatale
+ * (identique à getSecret() de src/lib/auth.ts). Le repli dev ne survit qu'en
+ * développement ; en production le bundle Edge est construit avec AUTH_SECRET
+ * incorporé (cf. DEPLOIEMENT.md, Étape 5).
+ */
 function getSecret(): string {
-  return process.env.AUTH_SECRET || DEV_FALLBACK_SECRET;
+  const secret = process.env.AUTH_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET manquant en production (proxy Edge) — cf. DEPLOIEMENT.md, Étape 5.");
+  }
+  return DEV_FALLBACK_SECRET;
 }
 
 /** base64url → octets (sans dépendance Node). */

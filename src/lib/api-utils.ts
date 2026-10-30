@@ -40,6 +40,38 @@ export function requireSession(req: Request): SessionPayload | null {
   return sessionFromRequest(req);
 }
 
+/**
+ * Cache rôle/état actif (Task 45 — RBAC faisant autorité).
+ * Le jeton de session est stateless : le rôle y est figé à la connexion. Sans
+ * relecture, un compte rétrogradé ou désactivé conserve ses privilèges jusqu'à
+ * l'expiration du jeton (8 h). On relit donc Profile en base, avec un TTL court
+ * (30 s) pour éviter une requête SQL par appel d'API — une rétrogradation ou une
+ * désactivation prend effet au plus tard 30 s après l'écriture en base.
+ */
+const ROLE_CACHE_TTL_MS = 30_000;
+const roleCache = new Map<string, { role: string; isActive: boolean; at: number }>();
+
+async function currentRole(uid: string, fallbackRole: string): Promise<{ role: string; isActive: boolean } | null> {
+  const cached = roleCache.get(uid);
+  const now = Date.now();
+  if (cached && now - cached.at < ROLE_CACHE_TTL_MS) return cached;
+  try {
+    const profile = await db.profile.findUnique({
+      where: { id: uid },
+      select: { role: true, isActive: true },
+    });
+    if (!profile) return null; // compte supprimé → accès immédiatement coupé
+    const entry = { role: profile.role, isActive: profile.isActive, at: now };
+    roleCache.set(uid, entry);
+    if (roleCache.size > 500) roleCache.clear(); // garde-fou mémoire
+    return entry;
+  } catch {
+    // Base injoignable : on retombe sur le rôle du jeton (disponibilité > fraîcheur),
+    // la signature HMAC reste la garantie d'authenticité.
+    return { role: fallbackRole, isActive: true };
+  }
+}
+
 /** Garde RBAC : renvoie la session ou une réponse d'erreur prête à retourner. */
 export async function requirePermission(
   req: Request,
@@ -47,7 +79,11 @@ export async function requirePermission(
 ): Promise<{ session: SessionPayload } | { error: NextResponse }> {
   const session = sessionFromRequest(req);
   if (!session) return { error: err("Authentification requise", 401) };
-  if (!hasPermission(session.role, permission)) {
+  const live = await currentRole(session.uid, session.role);
+  if (!live || !live.isActive) {
+    return { error: err("Compte désactivé ou supprimé", 401) };
+  }
+  if (!hasPermission(live.role, permission)) {
     return { error: err("Permission insuffisante pour cette action", 403, { required: permission }) };
   }
   return { session };
@@ -88,10 +124,18 @@ export function parseJsonArray(raw: string | null | undefined): string[] {
 
 export { isDomainAllowed } from "./url-guard";
 
+/**
+ * Task 45 — neutralisation des formules CSV : un champ commençant par = + - @ ou
+ * une tabulation/retour chariot serait interprété comme une formule à l'ouverture
+ * dans Excel/LibreOffice (injection via des données saisies dans les formulaires
+ * publics, exécutée par le destinataire de l'export). Une apostrophe initiale
+ * désactive l'interprétation formule dans tous les tableurs.
+ */
 export function csvEscape(value: unknown): string {
   const s = value === null || value === undefined ? "" : String(value);
-  if (/[",;\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  if (/[",;\n]/.test(safe)) return `"${safe.replace(/"/g, '""')}"`;
+  return safe;
 }
 
 export function toCsv(rows: Record<string, unknown>[], headers?: string[]): string {

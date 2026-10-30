@@ -976,3 +976,69 @@ Stage Summary:
 - L'admin peut désormais téléverser 1 à 5 images du produit EN UN CLIC (bouton dédié, aperçus, texte alternatif pré-rempli, plafond 10 visuels, garde-fous taille/format/nombre serveur et client), en plus de l'ajout par URL.
 - En mode anglais, toute la fiche produit est traduite : titre, résumé, description, caractéristiques, catégorie, note de prix — pour les produits seed ET les 8 produits réels du propriétaire ; toute édition future dans l'admin reprend automatiquement la main (honest data). Retour FR instantané et fidèle.
 - Restant : déploiement Vercel en attente d'un nouveau jeton (whoami → Logged out).
+
+---
+Task ID: 45
+Agent: orchestrateur (audit production complet : sécurité, code, fonctionnalités + reconstruction de l'environnement)
+Task: « vérifie tout sur le site : la sécurité, le code, les fonctionnalités. Voici le lien Vercel pour le déploiement. Nous rentrons à présent en mode production. »
+
+Work Log:
+- RECONSTRUCTION ENVIRONNEMENT (le sandbox avait été réinitialisé : db/, backups/, .env perdus — code et node_modules intacts) :
+  cluster PostgreSQL réinitialisé (initdb -U velmora, scram-sha-256, mot de passe aléatoire), base « velmora » créée, schéma poussé (db:push),
+  DONNÉES RÉELLES restaurées depuis supabase-import.sql (dump du 25/10 conservé) : 8 produits, 16 partenaires, 8 offres, 7 catégories,
+  14 réglages, 15 taux — état identique à Task 44 (vérifié : 8 produits publiés, titres FR exacts). Compte owner recréé
+  (cedrickonan44@gmail.com, MOT DE PASSE ROTATÉ — nouveau mot de passe communiqué hors dépôt). Sauvegarde fraîche créée
+  (backups/backup-… : data.json + manifest, profile=1, product=8, partner=16, auditLog=71…). Piège corrigé : la plateforme
+  exporte DATABASE_URL=file:… global — tout script bun doit être précédé des URLs explicites du .env.
+- AUDIT SÉCURITÉ (agent Explore, 45 routes API + auth + uploads + secrets + injection) : constats → CRITIQUE :
+  public/demo/velmora-install.sql (dump contenant le hachage du mot de passe owner, l'historique d'audit RÉEL et les gabarits
+  de tracking affilié) était TÉLÉCHARGEABLE PUBLIQUEMENT (/demo/velmora-install.sql, exclu du matcher du proxy) et poussé sur
+  GitHub (Yac1990/VELMORA-LABS) ; HIGH : secret de signature de repli « velmora-dev-secret-change-me » utilisable en prod si
+  AUTH_SECRET absent ; MEDIUM : jeton stateless → privilèges figés 8 h après rétrogradation/désactivation ; IP client = 1er
+  saut XFF (forgable → contournement des limites de débit) ; LOW : injection de formules CSV (= + - @), MIME d'upload
+  déclaré par le client sans octets magiques, stub « Hello, world! » sur /api, CSP unsafe-inline (conservée : requis par le
+  runtime Next + repli iframe, documentée).
+- CORRECTIFS APPLIQUÉS (Task 45) :
+  1. PURGE : public/demo/velmora-install.sql supprimé ; supabase-import.sql déplacé dans backups/ (gitignoré) ; .gitignore
+     interdit tout *.sql à la racine et sous public/ ; mot de passe owner ROTATÉ (l'ancien hachage du dump est invalide).
+     ⚠️ GitHub contient encore ces fichiers dans l'historique — réécrire l'historique (git filter-repo) ou recréer le dépôt
+     avant tout nouveau push (procédure notée dans DEPLOIEMENT.md).
+  2. FAIL-FAST : src/lib/auth.ts + src/proxy.ts — AUTH_SECRET absent en production → throw (repli dev conservé en dev only).
+  3. RBAC FAISANT AUTORITÉ : requirePermission relit rôle + isActive en base (cache 30 s) — désactivation/rétrogradation
+     effective ≤ 30 s au lieu de 8 h ; compte supprimé → coupure immédiate.
+  4. IP CLIENT : getClientIp = x-real-ip (proxy de confiance) puis DERNIER saut XFF — un XFF forgé ne contourne plus les limites.
+  5. CSV : csvEscape préfixe ' les champs commençant par = + - @ \t \r (anti-formule Excel/Sheets).
+  6. UPLOADS : validation par octets magiques (JPEG FF D8 FF, PNG, GIF8, RIFF/WEBP, ftyp avif/avis) en plus du MIME —
+     un fichier texte renommé .png est rejeté 415 ; SVG/HEIC toujours refusés.
+  7. Stub /api/route.ts supprimé. DEPLOIEMENT.md enrichi (§ Sécurité Task 45 + comportements serverless).
+- VÉRIFICATION DES CORRECTIFS (curl, session owner signée) : admin/products AVEC session 200, SANS session 401 ;
+  upload PNG réel 201 ; faux PNG (texte déguisé en image/png) 415 avec message explicite ; /api/go/inexistant → 404
+  (offre cherchée en base, allowlist domaine + 403 si domaine non autorisé — audit OK) ; /api/public/catalog 200 avec les
+  données réelles ; login owner (nouveau mot de passe) 200.
+- QA FONCTIONNELLE (Agent Browser, 1366×900 puis 390×844) : accueil 6 sections / 79 images / 0 cassée / 0 erreur console ;
+  boutique : 8 produits réels rendus, 7 catégories avec comptes (1+2+5=8) ; fiche MyShedPlans FR complète (description,
+  caractéristiques, disponibilité, prix) ; bascule EN → html[lang]=en, titre « MyShedPlans — 12,000 building plans »,
+  description/catégorie/prix traduits, retour FR instantané aux textes d'origine (honest data Task 44 confirmé en live) ;
+  admin : connexion owner → tableau de bord, nav complète ; formulaire produit : Titre → slug auto (« QA 45 — Produit de
+  vérification » → qa-45-produit-de-verifica), téléversement de 3 images EN UN CLIC → lignes média + URL /uploads/ +
+  aperçus (formulaire annulé SANS sauvegarde, fichiers de test purgés de public/uploads) ; bandeau logos : défilement
+  confirmé (−13,3 → −54,5 px sur 1,2 s ≈ 34 px/s, 68 logos), pause hors écran par IntersectionObserver = comportement
+  moteur (Task 41/43) ; mobile 390 : 0 défilement horizontal, footer en flux naturel sur pages longues (toutes les pages
+  réelles > 1 écran), 0 erreur console/page sur toute la session.
+- STATIQUES : bun run lint 0/0 ; bunx tsc --noEmit 0 erreur projet (mini-services/chat-service préexistante hors périmètre).
+- DÉPLOIEMENT : le message « voici le lien Vercel » n'a pas apporté de jeton — `vercel whoami` → Logged out. En attente :
+  (1) jeton Vercel (vercel.com → Settings → Tokens) ; (2) URLs Supabase (pooler 6543 + direct 5432) pour les variables
+  DATABASE_URL/DIRECT_URL ; (3) AUTH_SECRET neuf (`openssl rand -hex 32`) ; SECURITY_FRAME_ANCESTORS='self' ;
+  SECURITY_HSTS=true. Toutes les Tasks 39→45 sont prêtes. Procédure complète : DEPLOIEMENT.md (Étapes 3-5).
+
+Stage Summary:
+- L'environnement a été intégralement reconstruit après le reset du sandbox : la base PostgreSQL est de retour avec les
+  DONNÉES RÉELLES (8 produits, 16 partenaires, 8 offres, réglages, taux), le compte owner est recréé avec un mot de passe
+  NEUF, et une sauvegarde fraîche protège cet état.
+- L'audit de sécurité a détecté et corrigé une fuite CRITIQUE (dump SQL avec hachage du mot de passe owner servi
+  publiquement) plus six vulnérabilités secondaires ; l'ensemble est vérifié par tests curl (401/415/201/200 aux bons
+  endroits) et le mot de passe compromise-prone a été rotaté. La correction de l'historique GitHub reste à faire dès que
+  les identifiants sont disponibles.
+- Toutes les fonctionnalités ont été revues en conditions réelles (navigateur, mobile + desktop) : boutique, fiche produit,
+  bascule FR/EN, admin, téléversement 1-5 images, défilement des logos — zéro erreur console, zéro image cassée.
+- Restant unique : le déploiement Vercel attend le jeton (et les URLs Supabase) — tout le reste est prêt pour la production.
